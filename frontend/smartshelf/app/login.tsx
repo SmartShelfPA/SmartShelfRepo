@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
@@ -8,9 +8,10 @@ import { ThemedTextInput } from '@/components/themed-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
+import { login } from '@/services/api';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
@@ -24,37 +25,30 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     // Basic validation
-    if (!email.trim()) {
-      Alert.alert('Error', 'Please enter your email address');
-      return;
-    }
-
-    if (!password.trim()) {
-      Alert.alert('Error', 'Please enter your password');
-      return;
-    }
-
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      Alert.alert('Error', 'Please enter a valid email address');
+    if (!username.trim() || !password.trim()) {
+      // Validation failed - just return without showing alert
       return;
     }
 
     setIsLoading(true);
 
-    // TODO: Replace with actual API call to backend
-    // Simulating API call
-    setTimeout(() => {
+    try {
+      const response = await login(username.trim(), password);
+      
+      // Check if token was successfully stored
+      if (response && response.token) {
+        // Login successful and token stored - navigate directly to tabs (home)
+        router.replace('/(tabs)');
+      } else {
+        // Token not received - stay on login screen
+        console.error('[Login] Token not received in response');
+      }
+    } catch (error: any) {
+      // Login failed - error is logged in the API service
+      // Stay on login screen
+    } finally {
       setIsLoading(false);
-      // For now, just show success and navigate to tabs
-      Alert.alert('Success', 'Login successful!', [
-        {
-          text: 'OK',
-          onPress: () => router.replace('/(tabs)'),
-        },
-      ]);
-    }, 1000);
+    }
   };
 
   return (
@@ -77,13 +71,12 @@ export default function LoginScreen() {
 
           <ThemedView style={styles.form}>
             <ThemedView style={styles.inputContainer}>
-              <ThemedText style={styles.label}>Email</ThemedText>
+              <ThemedText style={styles.label}>Username</ThemedText>
               <ThemedTextInput
                 style={styles.input}
-                placeholder="Enter your email"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
+                placeholder="Enter your username"
+                value={username}
+                onChangeText={setUsername}
                 autoCapitalize="none"
                 autoCorrect={false}
                 editable={!isLoading}

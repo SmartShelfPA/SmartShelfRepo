@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
@@ -8,6 +8,7 @@ import { ThemedTextInput } from '@/components/themed-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
+import { register } from '@/services/api';
 
 // Configurable minimum age
 const MINIMUM_AGE = 13;
@@ -127,7 +128,7 @@ export default function RegisterScreen() {
     const error = validateField(currentStep, currentValue);
 
     if (error) {
-      Alert.alert('Validation Error', error);
+      // Validation error - just return without showing alert
       return;
     }
 
@@ -151,7 +152,7 @@ export default function RegisterScreen() {
     for (const step of STEP_ORDER) {
       const error = validateField(step, formData[step]);
       if (error) {
-        Alert.alert('Validation Error', `${STEP_LABELS[step]}: ${error}`);
+        // Validation error - go to the step with error
         setCurrentStep(step);
         return;
       }
@@ -159,46 +160,43 @@ export default function RegisterScreen() {
 
     setIsLoading(true);
 
-    // TODO: Replace with actual API call to backend
-    // Simulating API call
-    setTimeout(() => {
+    try {
+      const response = await register(
+        formData.name,
+        formData.username,
+        formData.password,
+        formData.email,
+        formData.dateOfBirth
+      );
+      
+      // Check if token was successfully stored
+      if (response && response.token) {
+        // Registration successful and token stored - navigate directly to tabs (home)
+        router.replace('/(tabs)');
+      } else {
+        // Token not received - redirect to login instead
+        console.error('[Register] Token not received in response');
+        router.replace('/login');
+      }
+    } catch (error: any) {
+      // Registration failed - stay on current step
+      // Error is logged in the API service
+    } finally {
       setIsLoading(false);
-      Alert.alert('Success', 'Registration successful!', [
-        {
-          text: 'OK',
-          onPress: () => router.replace('/login'),
-        },
-      ]);
-    }, 1000);
+    }
   };
 
   const handleBackToLogin = () => {
-    Alert.alert(
-      'Cancel Registration',
-      'Are you sure you want to go back to login? Your progress will be lost.',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Go Back',
-          style: 'destructive',
-          onPress: () => {
-            // Reset form
-            setFormData({
-              name: '',
-              email: '',
-              dateOfBirth: '',
-              username: '',
-              password: '',
-            });
-            setCurrentStep('name');
-            router.replace('/login');
-          },
-        },
-      ]
-    );
+    // Reset form and navigate directly to login
+    setFormData({
+      name: '',
+      email: '',
+      dateOfBirth: '',
+      username: '',
+      password: '',
+    });
+    setCurrentStep('name');
+    router.push('/login');
   };
 
   const getInputProps = () => {
