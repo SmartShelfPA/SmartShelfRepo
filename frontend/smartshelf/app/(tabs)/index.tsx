@@ -1,98 +1,232 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
+import { StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'expo-router';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { HomeHeader } from '@/components/home-header';
+import { StreakBadge } from '@/components/streak-badge';
+import { ThemedText } from '@/components/themed-text';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useAuth } from '@/src/context/AuthContext';
+import { fetchQuote, Quote } from '@/services/quotes';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const colorScheme = useColorScheme();
+  const cardBgColor = colorScheme === 'dark' ? '#1F1F1F' : '#FFFFFF';
+  const tintColor = colorScheme === 'dark' ? '#fff' : '#00FF41'; // UFO Green
+  const oliveBorder = '#00FF41'; // Match SmartShelf logo green
+  const greetingText = 'Hi, Ade';
+  const [typedGreeting, setTypedGreeting] = useState('');
+  const [cursorVisible, setCursorVisible] = useState(true);
+  const [typingDone, setTypingDone] = useState(false);
+  const [quote, setQuote] = useState<Quote | null>(null);
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  useEffect(() => {
+    let isMounted = true;
+    fetchQuote()
+      .then((nextQuote) => {
+        if (isMounted) {
+          setQuote(nextQuote);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setQuote(null);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let index = 0;
+    setTypedGreeting('');
+    setCursorVisible(true);
+    setTypingDone(false);
+    const timer = setInterval(() => {
+      index += 1;
+      setTypedGreeting(greetingText.slice(0, index));
+      if (index >= greetingText.length) {
+        clearInterval(timer);
+        setTypingDone(true);
+        setCursorVisible(false);
+      }
+    }, 140);
+    return () => clearInterval(timer);
+  }, [greetingText]);
+
+  useEffect(() => {
+    if (typingDone) {
+      return;
+    }
+    const blinkTimer = setInterval(() => {
+      setCursorVisible((prev) => !prev);
+    }, 500);
+    return () => clearInterval(blinkTimer);
+  }, [typingDone]);
+
+  return (
+    <ThemedView style={styles.container}>
+      <HomeHeader userInitials="AS" rightContent={<StreakBadge streakDays={7} />} />
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 32 },
+        ]}
+        showsVerticalScrollIndicator={false}>
+        <ThemedView style={styles.content}>
+          <ThemedText style={styles.greetingText} type="defaultSemiBold">
+            {typedGreeting || ' '}
+            <ThemedText style={styles.cursorText}>
+              {cursorVisible ? '|' : ' '}
+            </ThemedText>
+          </ThemedText>
+
+          <ThemedView style={styles.section}>
+            <ThemedText style={styles.sectionTitle} type="defaultSemiBold">
+              EXAM BOARDS
+            </ThemedText>
+            <ThemedView style={styles.examBoardRow}>
+              {[
+                { label: 'IGCSE', icon: 'school' },
+                { label: 'WAEC', icon: 'menu-book' },
+                { label: 'JAMB', icon: 'edit-note' },
+              ].map((board) => (
+                <TouchableOpacity
+                  key={board.label}
+                  style={[styles.examBoardIcon, { borderColor: oliveBorder, backgroundColor: cardBgColor }]}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(tabs)/bookshelf',
+                      params: { board: board.label, section: 'Textbooks' },
+                    })
+                  }
+                  activeOpacity={0.8}>
+                  <MaterialIcons name={board.icon as any} size={24} color={tintColor} />
+                  <ThemedText style={styles.examBoardLabel}>{board.label}</ThemedText>
+                </TouchableOpacity>
+              ))}
+            </ThemedView>
+          </ThemedView>
+
+          <TouchableOpacity
+            style={[styles.samplePapersCard, { borderColor: oliveBorder, backgroundColor: cardBgColor }]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push('/sample-papers');
+            }}
+            activeOpacity={0.8}>
+            <MaterialIcons name="picture-as-pdf" size={24} color={tintColor} />
+            <ThemedText style={styles.samplePapersLabel}>Sample Papers</ThemedText>
+            <MaterialIcons name="chevron-right" size={20} color={tintColor} />
+          </TouchableOpacity>
+
+          {quote && (
+            <ThemedView style={styles.quoteCard}>
+              <ThemedText style={styles.quoteText}>"{quote.text}"</ThemedText>
+              <ThemedText style={styles.quoteAuthor}>— {quote.author}</ThemedText>
+            </ThemedView>
+          )}
+        </ThemedView>
+      </ScrollView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 32,
+  },
+  content: {
+    paddingHorizontal: 16,
+    gap: 0,
+  },
+  greetingText: {
+    fontSize: 32,
+    fontWeight: '600',
+    paddingHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 12,
+    lineHeight: 36,
+    includeFontPadding: false,
+  },
+  cursorText: {
+    fontSize: 32,
+    fontWeight: '600',
+    lineHeight: 36,
+    includeFontPadding: false,
+  },
+  section: {
+    marginTop: 4,
+    marginBottom: 12,
+    gap: 12,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    paddingHorizontal: 16,
+  },
+  examBoardRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  examBoardIcon: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 2,
+    paddingVertical: 12,
+    alignItems: 'center',
+    gap: 6,
+  },
+  examBoardLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  samplePapersCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    gap: 12,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  samplePapersLabel: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  quoteCard: {
+    marginTop: 8,
+    marginHorizontal: 16,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: '#00000008',
+  },
+  quoteText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  quoteAuthor: {
+    marginTop: 8,
+    fontSize: 12,
+    opacity: 0.7,
   },
 });

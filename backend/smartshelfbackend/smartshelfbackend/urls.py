@@ -20,4 +20,6 @@ from django.urls import path, include
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/', include('auth.urls')),
+    path('api/quotes/', include('quotes.urls')),
+    path('api/pdf-proxy/', include('pdf_proxy.urls')),
 ]

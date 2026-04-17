@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "smartshelf",
+    "name": "SmartShelf",
     "slug": "smartshelf",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,9 +9,23 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "bundleIdentifier": "com.adesol.smartshelf.dev",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSExceptionDomains": {
+            "my-backend.com": {
+              "NSExceptionAllowsInsecureHTTPLoads": true,
+              "NSIncludesSubdomains": true
+            }
+          }
+        },
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
+      "package": "ca.com.smartshelf.dev",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -26,7 +40,9 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router",
+      "expo-dev-client",
+      ["@config-plugins/react-native-pdf"],
+      ["@config-plugins/react-native-blob-util"],
       [
         "expo-splash-screen",
         {
@@ -38,11 +54,20 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "./plugins/withNetworkSecurityConfig.js",
+      "expo-router",
+      "expo-web-browser",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "85defbb8-b6db-47c1-9567-549363518f47"
+      }
     }
   }
 }

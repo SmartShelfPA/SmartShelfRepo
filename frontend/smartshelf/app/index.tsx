@@ -32,7 +32,7 @@ export default function Index() {
   }
 
   if (hasToken) {
-    return <Redirect href="/(tabs)" />;
+    return <Redirect href="/account-select" />;
   }
 
   return <Redirect href="/login" />;
