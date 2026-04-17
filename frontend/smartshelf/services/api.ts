@@ -1,12 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Backend API base URL - adjust this to match your backend server
-// For Android emulator, use: http://10.0.2.2:8000/api
-// For iOS simulator, use: http://localhost:8000/api
-// For physical device, use your computer's IP address: http://YOUR_IP:8000/api
-const API_BASE_URL = __DEV__ 
-  ? 'http://localhost:8000/api'  // Development - adjust for your setup
+// For Android emulator: http://10.0.2.2:8000/api
+// For iOS simulator: http://localhost:8000/api
+// For physical device: http://YOUR_MACHINE_IP:8000/api (e.g. http://192.168.1.5:8000/api)
+export const API_BASE_URL = __DEV__
+  ? 'http://localhost:8000/api'  // Change to your IP for physical device PDF viewing
   : 'https://your-production-api.com/api';  // Production URL
+
+/** Backend base URL (without /api) - used for PDF proxy */
+export const getBackendBaseUrl = (): string => {
+  const url = API_BASE_URL.replace(/\/api\/?$/, '');
+  return url || API_BASE_URL;
+};
 
 // Token storage key
 const TOKEN_KEY = '@smartshelf:auth_token';
@@ -72,7 +78,7 @@ export const hasValidToken = async (): Promise<boolean> => {
 /**
  * Make API request with authentication
  */
-const apiRequest = async (
+export const apiRequest = async (
   endpoint: string,
   options: RequestInit = {}
 ): Promise<Response> => {

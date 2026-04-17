@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
@@ -7,47 +8,42 @@ import { ThemedView } from '@/components/themed-view';
 import { ThemedTextInput } from '@/components/themed-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
-import { register } from '@/services/api';
+import { setToken } from '@/services/api';
 
-// Configurable minimum age
-const MINIMUM_AGE = 13;
-
-type RegistrationStep = 'name' | 'email' | 'dateOfBirth' | 'username' | 'password';
-
-const STEP_ORDER: RegistrationStep[] = ['name', 'email', 'dateOfBirth', 'username', 'password'];
-
-const STEP_LABELS: Record<RegistrationStep, string> = {
-  name: 'Full Name',
-  email: 'Email Address',
-  dateOfBirth: 'Date of Birth',
-  username: 'Username',
-  password: 'Password',
-};
+type FieldName = 'name' | 'email' | 'password';
 
 export default function RegisterScreen() {
-  const [currentStep, setCurrentStep] = useState<RegistrationStep>('name');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    dateOfBirth: '',
-    username: '',
     password: '',
+  });
+  const [errors, setErrors] = useState<Record<FieldName, string | null>>({
+    name: null,
+    email: null,
+    password: null,
   });
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  // Ref to track current field values to avoid stale state in onBlur
+  const currentValuesRef = useRef(formData);
+
+  useEffect(() => {
+    currentValuesRef.current = formData;
+  }, [formData]);
 
   const tintColor = useThemeColor({}, 'tint');
   const backgroundColor = useThemeColor({}, 'background');
+  const textColor = useThemeColor({}, 'text');
   const colorScheme = useColorScheme();
-  const buttonTextColor = colorScheme === 'dark' ? Colors.dark.text : '#fff';
+  
+  // Use consistent button colors matching homepage
+  const buttonBgColor = '#00FF41'; // UFO Green - matches homepage
+  const buttonTextColor = '#FFFFFF'; // White text on green button
 
-  const currentStepIndex = STEP_ORDER.indexOf(currentStep);
-  const isFirstStep = currentStepIndex === 0;
-  const isLastStep = currentStepIndex === STEP_ORDER.length - 1;
-
-  const validateField = (step: RegistrationStep, value: string): string | null => {
-    switch (step) {
+  const validateField = (fieldName: FieldName, value: string): string | null => {
+    switch (fieldName) {
       case 'name':
         if (!value.trim()) {
           return 'Name is required';
@@ -61,39 +57,6 @@ export default function RegisterScreen() {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(value)) {
           return 'Please enter a valid email address';
-        }
-        return null;
-
-      case 'dateOfBirth':
-        if (!value.trim()) {
-          return 'Date of birth is required';
-        }
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-        if (!dateRegex.test(value)) {
-          return 'Please enter date in YYYY-MM-DD format';
-        }
-        const birthDate = new Date(value);
-        const today = new Date();
-        const age = today.getFullYear() - birthDate.getFullYear();
-        const monthDiff = today.getMonth() - birthDate.getMonth();
-        const dayDiff = today.getDate() - birthDate.getDate();
-        const actualAge = monthDiff < 0 || (monthDiff === 0 && dayDiff < 0) ? age - 1 : age;
-        
-        if (actualAge < MINIMUM_AGE) {
-          return `You must be at least ${MINIMUM_AGE} years old to register`;
-        }
-        if (birthDate > today) {
-          return 'Date of birth cannot be in the future';
-        }
-        return null;
-
-      case 'username':
-        if (!value.trim()) {
-          return 'Username is required';
-        }
-        const usernameRegex = /^[a-zA-Z0-9_]+$/;
-        if (!usernameRegex.test(value)) {
-          return 'Username can only contain letters, numbers, and underscores';
         }
         return null;
 
@@ -123,64 +86,48 @@ export default function RegisterScreen() {
     }
   };
 
-  const handleNext = () => {
-    const currentValue = formData[currentStep];
-    const error = validateField(currentStep, currentValue);
-
-    if (error) {
-      // Validation error - just return without showing alert
-      return;
-    }
-
-    if (isLastStep) {
-      handleSubmit();
-    } else {
-      const nextStep = STEP_ORDER[currentStepIndex + 1];
-      setCurrentStep(nextStep);
-    }
+  const handleFieldChange = (fieldName: FieldName, value: string) => {
+    const updatedData = { ...formData, [fieldName]: value };
+    setFormData(updatedData);
+    // Update ref immediately to ensure latest value is available for onBlur
+    currentValuesRef.current = updatedData;
+    // Clear error when user starts typing
+    setErrors((prevErrors) =>
+      prevErrors[fieldName] ? { ...prevErrors, [fieldName]: null } : prevErrors
+    );
   };
 
-  const handleBack = () => {
-    if (!isFirstStep) {
-      const prevStep = STEP_ORDER[currentStepIndex - 1];
-      setCurrentStep(prevStep);
-    }
+  const handleFieldBlur = (fieldName: FieldName) => {
+    // Use ref value to ensure we validate against the latest input value
+    const currentValue = currentValuesRef.current[fieldName];
+    const error = validateField(fieldName, currentValue);
+    setErrors((prevErrors) => ({ ...prevErrors, [fieldName]: error }));
   };
 
   const handleSubmit = async () => {
-    // Validate all fields one more time
-    for (const step of STEP_ORDER) {
-      const error = validateField(step, formData[step]);
-      if (error) {
-        // Validation error - go to the step with error
-        setCurrentStep(step);
-        return;
-      }
+    // Validate all fields
+    const newErrors: Record<FieldName, string | null> = {
+      name: validateField('name', formData.name),
+      email: validateField('email', formData.email),
+      password: validateField('password', formData.password),
+    };
+
+    setErrors(newErrors);
+
+    // Check if there are any errors
+    const hasErrors = Object.values(newErrors).some(error => error !== null);
+    if (hasErrors) {
+      return;
     }
 
     setIsLoading(true);
 
     try {
-      const response = await register(
-        formData.name,
-        formData.username,
-        formData.password,
-        formData.email,
-        formData.dateOfBirth
-      );
-      
-      // Check if token was successfully stored
-      if (response && response.token) {
-        // Registration successful and token stored - navigate directly to tabs (home)
-        router.replace('/(tabs)');
-      } else {
-        // Token not received - redirect to login instead
-        console.error('[Register] Token not received in response');
-        router.replace('/login');
-      }
+      await setToken('local-auth-bypass');
+      router.replace('/(tabs)');
     } catch (error: any) {
-      // Registration failed - stay on current step
-      // Error is logged in the API service
+      console.error('[Register] Failed to store auth:', error);
+      router.replace('/login');
     } finally {
       setIsLoading(false);
     }
@@ -191,81 +138,52 @@ export default function RegisterScreen() {
     setFormData({
       name: '',
       email: '',
-      dateOfBirth: '',
-      username: '',
       password: '',
     });
-    setCurrentStep('name');
+    setErrors({
+      name: null,
+      email: null,
+      password: null,
+    });
     router.push('/login');
   };
 
-  const getInputProps = () => {
-    switch (currentStep) {
-      case 'name':
-        return {
-          placeholder: 'Enter your full name',
-          value: formData.name,
-          onChangeText: (text: string) => setFormData({ ...formData, name: text }),
-          autoCapitalize: 'words' as const,
-          autoCorrect: false,
-        };
-
-      case 'email':
-        return {
-          placeholder: 'Enter your email address',
-          value: formData.email,
-          onChangeText: (text: string) => setFormData({ ...formData, email: text }),
-          keyboardType: 'email-address' as const,
-          autoCapitalize: 'none' as const,
-          autoCorrect: false,
-        };
-
-      case 'dateOfBirth':
-        return {
-          placeholder: 'YYYY-MM-DD',
-          value: formData.dateOfBirth,
-          onChangeText: (text: string) => setFormData({ ...formData, dateOfBirth: text }),
-          keyboardType: 'numeric' as const,
-          maxLength: 10,
-        };
-
-      case 'username':
-        return {
-          placeholder: 'Enter your username',
-          value: formData.username,
-          onChangeText: (text: string) => setFormData({ ...formData, username: text }),
-          autoCapitalize: 'none' as const,
-          autoCorrect: false,
-        };
-
-      case 'password':
-        return {
-          placeholder: 'Enter your password',
-          value: formData.password,
-          onChangeText: (text: string) => setFormData({ ...formData, password: text }),
-          secureTextEntry: true,
-          autoCapitalize: 'none' as const,
-          autoCorrect: false,
-        };
-
-      default:
-        return {};
+  const renderField = (
+    fieldName: FieldName,
+    label: string,
+    placeholder: string,
+    helperText?: string,
+    options?: {
+      keyboardType?: 'default' | 'email-address' | 'numeric';
+      autoCapitalize?: 'none' | 'words' | 'sentences';
+      secureTextEntry?: boolean;
+      maxLength?: number;
     }
-  };
-
-  const getFieldHelperText = (): string | null => {
-    switch (currentStep) {
-      case 'email':
-        return 'We\'ll use this to send you important updates';
-      case 'dateOfBirth':
-        return `You must be at least ${MINIMUM_AGE} years old`;
-      case 'username':
-        return 'Only letters, numbers, and underscores allowed';
-      case 'password':
-        return 'Must be 8+ characters with uppercase, lowercase, number, and special character';
-      default:
-        return null;
-    }
+  ) => {
+    return (
+      <ThemedView style={styles.inputContainer} key={fieldName}>
+        <ThemedText style={styles.label}>{label}</ThemedText>
+        <ThemedTextInput
+          style={[styles.input, errors[fieldName] && styles.inputError]}
+          placeholder={placeholder}
+          value={formData[fieldName]}
+          onChangeText={(text) => handleFieldChange(fieldName, text)}
+          onBlur={() => handleFieldBlur(fieldName)}
+          editable={!isLoading}
+          keyboardType={options?.keyboardType || 'default'}
+          autoCapitalize={options?.autoCapitalize || 'none'}
+          autoCorrect={false}
+          secureTextEntry={options?.secureTextEntry || false}
+          maxLength={options?.maxLength}
+        />
+        {errors[fieldName] && (
+          <ThemedText style={styles.errorText}>{errors[fieldName]}</ThemedText>
+        )}
+        {helperText && !errors[fieldName] && (
+          <ThemedText style={styles.helperText}>{helperText}</ThemedText>
+        )}
+      </ThemedView>
+    );
   };
 
   return (
@@ -274,74 +192,69 @@ export default function RegisterScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled">
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: Math.max(insets.top, 20) + 32 }
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}>
         <ThemedView style={styles.content}>
           <ThemedView style={styles.header}>
-            <ThemedText type="title" style={styles.title}>
-              Create Account
-            </ThemedText>
+            <ThemedView style={styles.titleContainer}>
+              <ThemedText type="title" style={styles.title} numberOfLines={2}>
+                Create Account
+              </ThemedText>
+            </ThemedView>
             <ThemedText style={styles.subtitle}>
-              Step {currentStepIndex + 1} of {STEP_ORDER.length}
+              Fill in your details to get started
             </ThemedText>
           </ThemedView>
 
           <ThemedView style={styles.form}>
-            <ThemedView style={styles.inputContainer}>
-              <ThemedText style={styles.label}>
-                {STEP_LABELS[currentStep]}
+            {renderField(
+              'name',
+              'Full Name',
+              'Enter your full name',
+              undefined,
+              { autoCapitalize: 'words' }
+            )}
+
+            {renderField(
+              'email',
+              'School Email',
+              'Enter school email',
+              undefined,
+              { keyboardType: 'email-address' }
+            )}
+
+            {renderField(
+              'password',
+              'Password',
+              'Enter your password',
+              'Must be 8+ characters with uppercase, lowercase, number, and special character',
+              { secureTextEntry: true }
+            )}
+
+            <TouchableOpacity
+              style={[
+                styles.submitButton,
+                { backgroundColor: buttonBgColor },
+                isLoading && styles.buttonDisabled,
+              ]}
+              onPress={handleSubmit}
+              disabled={isLoading}
+              activeOpacity={0.8}>
+              <ThemedText style={[styles.submitButtonText, { color: buttonTextColor }]}>
+                {isLoading ? 'Creating Account...' : 'Create Account'}
               </ThemedText>
-              <ThemedTextInput
-                style={styles.input}
-                {...getInputProps()}
-                editable={!isLoading}
-              />
-              {getFieldHelperText() && (
-                <ThemedText style={styles.helperText}>
-                  {getFieldHelperText()}
-                </ThemedText>
-              )}
-            </ThemedView>
-
-            <ThemedView style={styles.buttonContainer}>
-              {!isFirstStep && (
-                <TouchableOpacity
-                  style={[styles.button, styles.buttonSecondary, { borderColor: tintColor }]}
-                  onPress={handleBack}
-                  disabled={isLoading}
-                  activeOpacity={0.8}>
-                  <ThemedText style={[styles.buttonText, { color: tintColor }]}>
-                    Back
-                  </ThemedText>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                style={[
-                  styles.button,
-                  styles.buttonPrimary,
-                  { backgroundColor: tintColor },
-                  isLoading && styles.buttonDisabled,
-                ]}
-                onPress={handleNext}
-                disabled={isLoading}
-                activeOpacity={0.8}>
-                <ThemedText style={[styles.buttonText, { color: buttonTextColor }]}>
-                  {isLoading
-                    ? 'Processing...'
-                    : isLastStep
-                    ? 'Register'
-                    : 'Next'}
-                </ThemedText>
-              </TouchableOpacity>
-            </ThemedView>
+            </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.backToLoginButton}
               onPress={handleBackToLogin}
               disabled={isLoading}>
               <ThemedText style={styles.backToLoginText}>
-                Back to Login
+                Already have an account? <ThemedText style={[styles.backToLoginText, { fontWeight: '600', opacity: 1 }]}>Sign In</ThemedText>
               </ThemedText>
             </TouchableOpacity>
           </ThemedView>
@@ -357,21 +270,29 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 40,
   },
   content: {
     width: '100%',
     maxWidth: 400,
     alignSelf: 'center',
+    paddingHorizontal: 0,
   },
   header: {
-    marginBottom: 40,
+    marginBottom: 32,
+    alignItems: 'center',
+    width: '100%',
+  },
+  titleContainer: {
+    width: '100%',
+    paddingHorizontal: 8,
+    marginBottom: 8,
     alignItems: 'center',
   },
   title: {
-    marginBottom: 8,
     textAlign: 'center',
+    width: '100%',
   },
   subtitle: {
     fontSize: 16,
@@ -379,7 +300,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   form: {
-    gap: 20,
+    gap: 24,
   },
   inputContainer: {
     gap: 8,
@@ -392,44 +313,43 @@ const styles = StyleSheet.create({
   input: {
     width: '100%',
   },
+  inputError: {
+    borderColor: '#ff4444',
+    borderWidth: 1,
+  },
   helperText: {
     fontSize: 12,
     opacity: 0.6,
     marginTop: 4,
   },
-  buttonContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
+  errorText: {
+    fontSize: 12,
+    color: '#ff4444',
+    marginTop: 4,
   },
-  button: {
-    flex: 1,
+  submitButton: {
+    marginTop: 8,
     paddingVertical: 16,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  buttonPrimary: {
-    // backgroundColor set dynamically
-  },
-  buttonSecondary: {
-    borderWidth: 1,
-  },
   buttonDisabled: {
     opacity: 0.6,
   },
-  buttonText: {
+  submitButtonText: {
     fontSize: 16,
     fontWeight: '600',
   },
   backToLoginButton: {
-    marginTop: 16,
+    marginTop: 20,
     paddingVertical: 12,
     alignItems: 'center',
   },
   backToLoginText: {
     fontSize: 14,
     opacity: 0.7,
+    textAlign: 'center',
   },
 });
 

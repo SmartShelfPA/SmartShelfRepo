@@ -23,7 +23,26 @@ from SmartShelfRepo folder (in terminal)
 
         enter w in terminal to access the web ui
 
+### Android SDK (for native builds)
 
+Set the Android SDK path so Gradle can find it.
 
-        cd backend/smartshelfbackend
-        python manage.py runserver
+**Option 1 – Environment variable (recommended)**
+
+In PowerShell (run as Administrator or for current user):
+
+```powershell
+[System.Environment]::SetEnvironmentVariable("ANDROID_HOME", "C:\Users\theso\AppData\Local\Android\Sdk", "User")
+```
+
+Replace `theso` with your Windows username if different. Restart the terminal after setting.
+
+**Option 2 – local.properties (after prebuild)**
+
+After running `npx expo prebuild`, create `frontend/smartshelf/android/local.properties`:
+
+```
+sdk.dir=C\:\\Users\\theso\\AppData\\Local\\Android\\Sdk
+```
+
+Replace `theso` with your Windows username. Use double backslashes (`\\`) in the path. You can copy `frontend/smartshelf/local.properties.example` and edit the path.

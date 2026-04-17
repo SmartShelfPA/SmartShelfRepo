@@ -1,54 +1,30 @@
-import { useState } from 'react';
-import { StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity } from 'react-native';
+import { StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Image, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { ThemedTextInput } from '@/components/themed-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
-import { login } from '@/services/api';
+import { setToken } from '@/services/api';
 
 export default function LoginScreen() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-
-  const tintColor = useThemeColor({}, 'tint');
+  const insets = useSafeAreaInsets();
   const backgroundColor = useThemeColor({}, 'background');
-  const colorScheme = useColorScheme();
-  
-  // Determine button text color based on theme
-  const buttonTextColor = colorScheme === 'dark' ? Colors.dark.text : '#fff';
 
-  const handleLogin = async () => {
-    // Basic validation
-    if (!username.trim() || !password.trim()) {
-      // Validation failed - just return without showing alert
-      return;
-    }
+  const buttonBgColor = '#00FF41'; // SmartShelf green
+  const buttonTextColor = '#FFFFFF';
 
-    setIsLoading(true);
+  const handleSignIn = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await setToken('local-auth-bypass');
+    router.replace('/account-select');
+  };
 
-    try {
-      const response = await login(username.trim(), password);
-      
-      // Check if token was successfully stored
-      if (response && response.token) {
-        // Login successful and token stored - navigate directly to tabs (home)
-        router.replace('/(tabs)');
-      } else {
-        // Token not received - stay on login screen
-        console.error('[Login] Token not received in response');
-      }
-    } catch (error: any) {
-      // Login failed - error is logged in the API service
-      // Stay on login screen
-    } finally {
-      setIsLoading(false);
-    }
+  const handleSignUp = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/register');
   };
 
   return (
@@ -57,66 +33,43 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: Math.max(insets.top, 20) + 20 }]}
         keyboardShouldPersistTaps="handled">
         <ThemedView style={styles.content}>
           <ThemedView style={styles.header}>
+            <View style={styles.logoContainer}>
+              <Image
+                source={require('@/assets/images/ss-logo.png')}
+                style={styles.logo}
+                resizeMode="contain"
+              />
+            </View>
             <ThemedText type="title" style={styles.title}>
               SmartShelf
             </ThemedText>
             <ThemedText style={styles.subtitle}>
-              Sign in to continue
+              Sign in or create an account
             </ThemedText>
           </ThemedView>
 
           <ThemedView style={styles.form}>
-            <ThemedView style={styles.inputContainer}>
-              <ThemedText style={styles.label}>Username</ThemedText>
-              <ThemedTextInput
-                style={styles.input}
-                placeholder="Enter your username"
-                value={username}
-                onChangeText={setUsername}
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!isLoading}
-              />
-            </ThemedView>
-
-            <ThemedView style={styles.inputContainer}>
-              <ThemedText style={styles.label}>Password</ThemedText>
-              <ThemedTextInput
-                style={styles.input}
-                placeholder="Enter your password"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!isLoading}
-              />
-            </ThemedView>
-
             <TouchableOpacity
               style={[
                 styles.button,
-                { backgroundColor: tintColor },
-                isLoading && styles.buttonDisabled,
+                { backgroundColor: buttonBgColor },
               ]}
-              onPress={handleLogin}
-              disabled={isLoading}
+              onPress={handleSignIn}
               activeOpacity={0.8}>
               <ThemedText style={[styles.buttonText, { color: buttonTextColor }]}>
-                {isLoading ? 'Signing in...' : 'Sign In'}
+                Sign In
               </ThemedText>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.registerButton}
-              onPress={() => router.push('/register')}
-              disabled={isLoading}>
+              onPress={handleSignUp}>
               <ThemedText style={styles.registerButtonText}>
-                Don't have an account? <ThemedText style={[styles.registerButtonText, { fontWeight: '600' }]}>Sign Up</ThemedText>
+                Don't have an account? <ThemedText style={[styles.registerButtonText, { fontWeight: '600', opacity: 1 }]}>Sign Up</ThemedText>
               </ThemedText>
             </TouchableOpacity>
           </ThemedView>
@@ -144,6 +97,17 @@ const styles = StyleSheet.create({
     marginBottom: 40,
     alignItems: 'center',
   },
+  logoContainer: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  logo: {
+    width: 140,
+    height: 140,
+  },
   title: {
     marginBottom: 8,
     textAlign: 'center',
@@ -156,26 +120,11 @@ const styles = StyleSheet.create({
   form: {
     gap: 20,
   },
-  inputContainer: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  input: {
-    width: '100%',
-  },
   button: {
-    marginTop: 8,
     paddingVertical: 16,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  buttonDisabled: {
-    opacity: 0.6,
   },
   buttonText: {
     fontSize: 16,
