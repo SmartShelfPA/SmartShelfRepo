@@ -1,0 +1,55 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: smartshelf-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: smartshelf
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - smartshelf_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d smartshelf"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  quotes:
+    image: hashicorp/http-echo:1.0.0
+    container_name: smartshelf-quotes
+    restart: unless-stopped
+    command:
+      - "-listen=:8080"
+      - "-text={\"Quote\":\"The beautiful thing about learning is that no one can take it away from you.\",\"Author\":\"B.B. King\"}"
+    ports:
+      - "8080:8080"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: smartshelf-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      quotes:
+        condition: service_started
+    environment:
+      POSTGRES_DB: smartshelf
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      QUOTES_API_URL: http://quotes:8080/
+      DEBUG: "True"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/smartshelfbackend:/app/smartshelfbackend
+
+volumes:
+  smartshelf_postgres_data:

@@ -1,7 +1,14 @@
 from django.utils.text import slugify
 from rest_framework import serializers
 
-from .models import Book, Category, Organization, ReadingProgress, UserProfile
+from .models import (
+    Book,
+    Category,
+    Organization,
+    PublisherProfile,
+    ReadingProgress,
+    UserProfile,
+)
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
@@ -33,6 +40,17 @@ class UserProfileSerializer(serializers.ModelSerializer):
         )
 
 
+class PublisherProfileSerializer(serializers.ModelSerializer):
+    companyName = serializers.CharField(source="company_name")
+    contactEmail = serializers.EmailField(source="contact_email")
+    isVerified = serializers.BooleanField(source="is_verified")
+    catalogSize = serializers.IntegerField(source="catalog_size", read_only=True)
+
+    class Meta:
+        model = PublisherProfile
+        fields = ("id", "companyName", "contactEmail", "isVerified", "catalogSize")
+
+
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
@@ -40,21 +58,35 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class BookSerializer(serializers.ModelSerializer):
-    category = CategorySerializer(many=True, read_only=True)
+    publisherId = serializers.UUIDField(source="publisher_id", read_only=True)
+    coverImageUrl = serializers.SerializerMethodField()
+    pageCount = serializers.IntegerField(source="page_count")
+    category = serializers.SerializerMethodField()
 
     class Meta:
         model = Book
         fields = (
             "id",
+            "publisherId",
             "isbn",
             "title",
             "author",
-            "cover_image_url",
+            "coverImageUrl",
             "description",
-            "page_count",
-            "published_year",
+            "pageCount",
             "category",
         )
+
+    def get_coverImageUrl(self, obj):
+        request = self.context.get("request")
+        if obj.cover_image_url:
+            return obj.cover_image_url
+        if obj.cover_image_file and request:
+            return request.build_absolute_uri(obj.cover_image_file.url)
+        return ""
+
+    def get_category(self, obj):
+        return [item.name for item in obj.category.all()]
 
 
 class ReadingProgressSerializer(serializers.ModelSerializer):
@@ -74,9 +106,24 @@ class ReadingProgressSerializer(serializers.ModelSerializer):
         )
 
 
+class ReadingProgressInlineSerializer(serializers.ModelSerializer):
+    percent_complete = serializers.FloatField(read_only=True)
+
+    class Meta:
+        model = ReadingProgress
+        fields = (
+            "id",
+            "status",
+            "current_page",
+            "last_read_at",
+            "rating",
+            "percent_complete",
+        )
+
+
 class BookshelfSerializer(serializers.Serializer):
     book = BookSerializer()
-    progress = ReadingProgressSerializer()
+    progress = ReadingProgressInlineSerializer()
 
 
 class StaffBookCreateSerializer(serializers.ModelSerializer):
@@ -115,3 +162,85 @@ class StaffBookCreateSerializer(serializers.ModelSerializer):
         if categories:
             book.category.set(categories)
         return book
+
+
+class PublisherBookUploadSerializer(serializers.ModelSerializer):
+    pageCount = serializers.IntegerField(source="page_count")
+    coverImage = serializers.FileField(required=False, allow_null=True, write_only=True)
+    contentFile = serializers.FileField(required=False, allow_null=True, write_only=True)
+    category = serializers.ListField(
+        child=serializers.CharField(max_length=120), required=False, allow_empty=True
+    )
+
+    class Meta:
+        model = Book
+        fields = (
+            "id",
+            "isbn",
+            "title",
+            "author",
+            "pageCount",
+            "category",
+            "description",
+            "coverImage",
+            "contentFile",
+        )
+        read_only_fields = ("id",)
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        category_names = validated_data.pop("category", [])
+        cover_file = validated_data.pop("coverImage", None)
+        content_file = validated_data.pop("contentFile", None)
+        book = Book.objects.create(
+            organization=request.user.organization,
+            publisher=request.user,
+            **validated_data,
+        )
+
+        if cover_file:
+            book.cover_image_file = cover_file
+        if content_file:
+            book.content_file = content_file
+        book.save()
+
+        categories = []
+        for name in category_names:
+            slug = slugify(name)
+            category, _ = Category.objects.get_or_create(
+                organization=request.user.organization,
+                slug=slug,
+                defaults={"name": name},
+            )
+            categories.append(category)
+        if categories:
+            book.category.set(categories)
+        return book
+
+    def update(self, instance, validated_data):
+        category_names = validated_data.pop("category", None)
+        cover_file = validated_data.pop("coverImage", None)
+        content_file = validated_data.pop("contentFile", None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        request = self.context.get("request")
+        if cover_file:
+            instance.cover_image_file = cover_file
+        if content_file:
+            instance.content_file = content_file
+        instance.save()
+
+        if category_names is not None:
+            categories = []
+            for name in category_names:
+                slug = slugify(name)
+                category, _ = Category.objects.get_or_create(
+                    organization=instance.organization,
+                    slug=slug,
+                    defaults={"name": name},
+                )
+                categories.append(category)
+            instance.category.set(categories)
+        return instance

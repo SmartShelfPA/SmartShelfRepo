@@ -9,18 +9,19 @@ import { HomeHeader } from '@/components/home-header';
 import { StreakBadge } from '@/components/streak-badge';
 import { ThemedText } from '@/components/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useAuth } from '@/src/context/AuthContext';
+import { useAuthStore } from '@/src/store/auth';
 import { fetchQuote, Quote } from '@/services/quotes';
 
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const user = useAuthStore((s) => s.user);
   const colorScheme = useColorScheme();
   const cardBgColor = colorScheme === 'dark' ? '#1F1F1F' : '#FFFFFF';
   const tintColor = colorScheme === 'dark' ? '#fff' : '#00FF41'; // UFO Green
   const oliveBorder = '#00FF41'; // Match SmartShelf logo green
-  const greetingText = 'Hi, Ade';
+  const firstName = user?.full_name?.split(' ')[0] || 'Reader';
+  const greetingText = `Hi, ${firstName}`;
   const [typedGreeting, setTypedGreeting] = useState('');
   const [cursorVisible, setCursorVisible] = useState(true);
   const [typingDone, setTypingDone] = useState(false);

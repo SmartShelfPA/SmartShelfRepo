@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { StyleSheet, KeyboardAvoidingView, Platform, ScrollView, TouchableOpacity, Image, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -5,25 +6,38 @@ import * as Haptics from 'expo-haptics';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { ThemedTextInput } from '@/components/themed-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { setToken } from '@/services/api';
+import { useAuthStore } from '@/src/store/auth';
 
 export default function LoginScreen() {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const signIn = useAuthStore((s) => s.signIn);
   const backgroundColor = useThemeColor({}, 'background');
 
   const buttonBgColor = '#00FF41'; // SmartShelf green
   const buttonTextColor = '#FFFFFF';
 
   const handleSignIn = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await setToken('local-auth-bypass');
-    router.replace('/account-select');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    if (!username.trim() || !password.trim()) return;
+    setIsLoading(true);
+    try {
+      await signIn(username.trim(), password);
+      router.replace('/account-select');
+    } catch (error) {
+      console.error('[Login] Sign in failed:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSignUp = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     router.push('/register');
   };
 
@@ -53,15 +67,35 @@ export default function LoginScreen() {
           </ThemedView>
 
           <ThemedView style={styles.form}>
+            <ThemedTextInput
+              style={styles.input}
+              placeholder="Username"
+              value={username}
+              onChangeText={setUsername}
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!isLoading}
+            />
+            <ThemedTextInput
+              style={styles.input}
+              placeholder="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!isLoading}
+            />
             <TouchableOpacity
               style={[
                 styles.button,
                 { backgroundColor: buttonBgColor },
               ]}
               onPress={handleSignIn}
+              disabled={isLoading}
               activeOpacity={0.8}>
               <ThemedText style={[styles.buttonText, { color: buttonTextColor }]}>
-                Sign In
+                {isLoading ? 'Signing In...' : 'Sign In'}
               </ThemedText>
             </TouchableOpacity>
 
@@ -119,6 +153,9 @@ const styles = StyleSheet.create({
   },
   form: {
     gap: 20,
+  },
+  input: {
+    width: '100%',
   },
   button: {
     paddingVertical: 16,

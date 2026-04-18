@@ -1,14 +1,18 @@
 from django.db.models import Q
 from rest_framework import generics, status
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Book, ReadingProgress, UserProfile
-from .permissions import IsStaffRole
+from .models import Book, PublisherProfile, ReadingProgress, UserProfile
+from .permissions import IsPublisherRole, IsStaffRole
 from .serializers import (
     BookSerializer,
-    ReadingProgressSerializer,
+    BookshelfSerializer,
+    PublisherBookUploadSerializer,
+    PublisherProfileSerializer,
+    ReadingProgressInlineSerializer,
     StaffBookCreateSerializer,
     UserProfileSerializer,
 )
@@ -18,6 +22,16 @@ class ProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        if request.user.role == UserProfile.Role.PUBLISHER:
+            publisher_profile = (
+                PublisherProfile.objects.filter(user=request.user).first()
+            )
+            if not publisher_profile:
+                return Response(
+                    {"error": "Publisher profile is missing for this user."}, status=404
+                )
+            serializer = PublisherProfileSerializer(publisher_profile)
+            return Response(serializer.data)
         serializer = UserProfileSerializer(request.user)
         return Response(serializer.data)
 
@@ -63,7 +77,14 @@ class BookshelfView(APIView):
 
     def get(self, request):
         progress_qs = self.get_progress_queryset(request.user)
-        serializer = ReadingProgressSerializer(progress_qs, many=True)
+        data = [
+            {
+                "book": BookSerializer(item.book, context={"request": request}).data,
+                "progress": ReadingProgressInlineSerializer(item).data,
+            }
+            for item in progress_qs
+        ]
+        serializer = BookshelfSerializer(data, many=True)
         return Response(serializer.data)
 
 
@@ -75,5 +96,53 @@ class StaffBookCreateView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         book = serializer.save()
-        output = BookSerializer(book)
+        output = BookSerializer(book, context={"request": request})
         return Response(output.data, status=status.HTTP_201_CREATED)
+
+
+class PublisherBookCreateView(generics.CreateAPIView):
+    permission_classes = [IsAuthenticated, IsPublisherRole]
+    serializer_class = PublisherBookUploadSerializer
+    parser_classes = [MultiPartParser, FormParser]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        book = serializer.save()
+        return Response(
+            BookSerializer(book, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PublisherBookUpdateView(generics.UpdateAPIView):
+    permission_classes = [IsAuthenticated, IsPublisherRole]
+    serializer_class = PublisherBookUploadSerializer
+    parser_classes = [MultiPartParser, FormParser]
+    queryset = Book.objects.all()
+    lookup_field = "id"
+
+    def get_queryset(self):
+        return Book.objects.filter(publisher=self.request.user)
+
+    def patch(self, request, *args, **kwargs):
+        return self.partial_update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        book = serializer.save()
+        return Response(BookSerializer(book, context={"request": request}).data)
+
+
+class PublisherCatalogView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated, IsPublisherRole]
+    serializer_class = BookSerializer
+
+    def get_queryset(self):
+        return (
+            Book.objects.filter(publisher=self.request.user)
+            .prefetch_related("category")
+            .order_by("-id")
+        )

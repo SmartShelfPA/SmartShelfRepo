@@ -1,12 +1,16 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { universalStorage } from '@/src/lib/universalStorage';
 
 // Backend API base URL - adjust this to match your backend server
 // For Android emulator: http://10.0.2.2:8000/api
 // For iOS simulator: http://localhost:8000/api
 // For physical device: http://YOUR_MACHINE_IP:8000/api (e.g. http://192.168.1.5:8000/api)
-export const API_BASE_URL = __DEV__
-  ? 'http://localhost:8000/api'  // Change to your IP for physical device PDF viewing
-  : 'https://your-production-api.com/api';  // Production URL
+const DEFAULT_LOCAL_API_BASE_URL = 'http://127.0.0.1:8000/api';
+
+export const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_BASE_URL ||
+  (__DEV__ ? DEFAULT_LOCAL_API_BASE_URL : 'https://your-production-api.com/api');
+
+const REQUEST_TIMEOUT_MS = 10000;
 
 /** Backend base URL (without /api) - used for PDF proxy */
 export const getBackendBaseUrl = (): string => {
@@ -14,46 +18,91 @@ export const getBackendBaseUrl = (): string => {
   return url || API_BASE_URL;
 };
 
-// Token storage key
+// Legacy disk keys (cleared on sign-out / startup; session token is in-memory only)
 const TOKEN_KEY = '@smartshelf:auth_token';
+const PROFILE_KEY = '@smartshelf:user_profile';
 
-/**
- * Get stored authentication token
- */
-export const getToken = async (): Promise<string | null> => {
-  try {
-    const token = await AsyncStorage.getItem(TOKEN_KEY);
-    return token;
-  } catch (error) {
-    console.error('Error getting token:', error);
-    return null;
-  }
+export type UserRole = 'student' | 'parent' | 'staff' | 'publisher';
+
+export type UserProfile = {
+  id: string;
+  username: string;
+  email: string;
+  role: UserRole;
+  full_name: string;
+  date_of_birth?: string | null;
+  avatar_url?: string;
+  staff_role?: string;
+  staff_department?: string;
+  managed_student_ids?: string[];
+};
+
+let sessionToken: string | null = null;
+let sessionProfile: UserProfile | null = null;
+
+export type PublisherProfile = {
+  id: string;
+  companyName: string;
+  contactEmail: string;
+  isVerified: boolean;
+  catalogSize: number;
+};
+
+export type Book = {
+  id: string;
+  publisherId?: string;
+  isbn?: string;
+  title: string;
+  author: string;
+  coverImageUrl: string;
+  description: string;
+  pageCount: number;
+  category: string[];
+};
+
+export type ReadingProgress = {
+  id: string;
+  status: 'to-read' | 'reading' | 'completed';
+  current_page: number;
+  last_read_at: string;
+  rating?: number | null;
+  percent_complete: number;
+};
+
+export type BookshelfItem = {
+  book: Book;
+  progress: ReadingProgress;
 };
 
 /**
- * Store authentication token
+ * Session token (memory only — reload requires sign-in again).
  */
+export const getToken = async (): Promise<string | null> => sessionToken;
+
 export const setToken = async (token: string): Promise<void> => {
-  try {
-    await AsyncStorage.setItem(TOKEN_KEY, token);
-    console.log('Token stored successfully');
-  } catch (error) {
-    console.error('Error storing token:', error);
-    throw error;
-  }
+  sessionToken = token;
+};
+
+export const getStoredProfile = async (): Promise<UserProfile | null> => sessionProfile;
+
+export const setStoredProfile = async (profile: UserProfile): Promise<void> => {
+  sessionProfile = profile;
 };
 
 /**
- * Remove authentication token
+ * Clears session and any legacy persisted auth keys (native + web).
  */
 export const removeToken = async (): Promise<void> => {
-  try {
-    await AsyncStorage.removeItem(TOKEN_KEY);
-    console.log('Token removed successfully');
-  } catch (error) {
-    console.error('Error removing token:', error);
-    throw error;
-  }
+  sessionToken = null;
+  sessionProfile = null;
+  await universalStorage.removeItem(TOKEN_KEY);
+  await universalStorage.removeItem(PROFILE_KEY);
+};
+
+/** Remove disk-only auth keys (e.g. after upgrade from persisted-token builds). */
+export const clearPersistedAuthFromDisk = async (): Promise<void> => {
+  await universalStorage.removeItem(TOKEN_KEY);
+  await universalStorage.removeItem(PROFILE_KEY);
 };
 
 /**
@@ -82,25 +131,31 @@ export const apiRequest = async (
   endpoint: string,
   options: RequestInit = {}
 ): Promise<Response> => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const token = await getToken();
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...options.headers,
+    ...(options.headers as Record<string, string> | undefined),
   };
 
   if (token) {
-    headers['Authorization'] = `Token ${token}`;
+    headers['Authorization'] = `Bearer ${token}`;
   }
 
   const url = `${API_BASE_URL}${endpoint}`;
   console.log(`[API] ${options.method || 'GET'} ${url}`);
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
-
-  return response;
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers,
+      signal: options.signal ?? controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeout);
+  }
 };
 
 /**
@@ -146,6 +201,9 @@ export const login = async (username: string, password: string) => {
 
     console.log('[API] Login successful, token received');
     await setToken(data.token);
+    if (data.user) {
+      await setStoredProfile(data.user);
+    }
     
     return data;
   } catch (error) {
@@ -158,11 +216,13 @@ export const login = async (username: string, password: string) => {
  * Register new user
  */
 export const register = async (
-  name: string,
+  full_name: string,
   username: string,
   password: string,
   email: string,
-  date_of_birth: string
+  date_of_birth: string,
+  organization_slug = 'default-school',
+  role: UserRole = 'student'
 ) => {
   console.log('[API] Register request initiated for username:', username);
   
@@ -170,11 +230,13 @@ export const register = async (
     const response = await apiRequest('/auth/register/', {
       method: 'POST',
       body: JSON.stringify({
-        name,
+        full_name,
         username,
         password,
         email,
         date_of_birth,
+        organization_slug,
+        role,
       }),
     });
 
@@ -188,11 +250,51 @@ export const register = async (
 
     console.log('[API] Registration successful, token received');
     await setToken(data.token);
+    if (data.user) {
+      await setStoredProfile(data.user);
+    }
     
     return data;
   } catch (error) {
     console.error('[API] Register error:', error);
     throw error;
   }
+};
+
+export const getProfile = async (): Promise<UserProfile | PublisherProfile> => {
+  const response = await apiRequest('/v1/profile/');
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to fetch profile');
+  }
+  if ('username' in data) {
+    await setStoredProfile(data as UserProfile);
+  }
+  return data;
+};
+
+export const fetchBooks = async (params?: {
+  search?: string;
+  category?: string;
+}): Promise<Book[]> => {
+  const query = new URLSearchParams();
+  if (params?.search) query.set('search', params.search);
+  if (params?.category) query.set('category', params.category);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  const response = await apiRequest(`/v1/books/${suffix}`);
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to fetch books');
+  }
+  return data as Book[];
+};
+
+export const fetchBookshelf = async (): Promise<BookshelfItem[]> => {
+  const response = await apiRequest('/v1/bookshelf/');
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to fetch bookshelf');
+  }
+  return data as BookshelfItem[];
 };
 

@@ -9,3 +9,11 @@ class IsStaffRole(BasePermission):
             bool(request.user and request.user.is_authenticated)
             and request.user.role == UserProfile.Role.STAFF
         )
+
+
+class IsPublisherRole(BasePermission):
+    def has_permission(self, request, view):
+        return (
+            bool(request.user and request.user.is_authenticated)
+            and request.user.role == UserProfile.Role.PUBLISHER
+        )

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   StyleSheet,
   ScrollView,
@@ -17,12 +17,14 @@ import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { useAuth } from '@/src/context/AuthContext';
+import { useAuthStore } from '@/src/store/auth';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const user = useAuthStore((state) => state.user);
+  const refreshProfile = useAuthStore((state) => state.refreshProfile);
+  const signOut = useAuthStore((state) => state.signOut);
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [showAchievements, setShowAchievements] = useState(false);
   const colorScheme = useColorScheme();
@@ -32,10 +34,16 @@ export default function ProfileScreen() {
   const borderColor = colorScheme === 'dark' ? '#2A2A2A' : '#E5E5E5';
   const accentColor = '#00FF41';
 
-  const displayName = 'Ade Solabomi';
+  useEffect(() => {
+    refreshProfile().catch((error) => {
+      console.error('[Profile] Failed to refresh profile:', error);
+    });
+  }, [refreshProfile]);
+
+  const displayName = user?.full_name || 'SmartShelf User';
   const initials = displayName
     .split(' ')
-    .map((part) => part[0])
+    .map((part: string) => part[0])
     .slice(0, 2)
     .join('')
     .toUpperCase();
@@ -130,7 +138,10 @@ export default function ProfileScreen() {
 
         <TouchableOpacity
           style={[styles.logoutButton, { backgroundColor: cardBgColor, borderColor }]}
-          onPress={() => Alert.alert('Logout', 'Coming soon.')}
+          onPress={async () => {
+            await signOut();
+            router.replace('/login');
+          }}
           activeOpacity={0.8}>
           <ThemedText style={[styles.logoutText, { color: accentColor }]}>Logout</ThemedText>
           <MaterialIcons name="logout" size={18} color={accentColor} />

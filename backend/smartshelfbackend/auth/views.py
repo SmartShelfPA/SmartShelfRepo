@@ -5,12 +5,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from users.models import Organization, UserProfile
+from users.models import Organization, PublisherProfile, UserProfile
 from users.serializers import UserProfileSerializer
 
 
 class RegisterSerializer(serializers.Serializer):
-    organization_slug = serializers.SlugField()
+    organization_slug = serializers.SlugField(required=False, allow_blank=True)
     username = serializers.CharField(max_length=150)
     password = serializers.CharField(min_length=8, write_only=True)
     email = serializers.EmailField()
@@ -22,6 +22,8 @@ class RegisterSerializer(serializers.Serializer):
     staff_department = serializers.CharField(
         required=False, allow_blank=True, max_length=120
     )
+    company_name = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    contact_email = serializers.EmailField(required=False, allow_blank=True)
 
     def validate(self, attrs):
         role = attrs["role"]
@@ -32,6 +34,15 @@ class RegisterSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     "staff_department is required for staff users."
                 )
+        if role == UserProfile.Role.PUBLISHER:
+            if not attrs.get("company_name"):
+                raise serializers.ValidationError("company_name is required for publishers.")
+            if not attrs.get("contact_email"):
+                raise serializers.ValidationError("contact_email is required for publishers.")
+        if role != UserProfile.Role.PUBLISHER and not attrs.get("organization_slug"):
+            raise serializers.ValidationError(
+                "organization_slug is required for non-publisher users."
+            )
         return attrs
 
 
@@ -44,12 +55,14 @@ class RegisterView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        organization = Organization.objects.filter(slug=data["organization_slug"]).first()
-        if not organization:
-            return Response(
-                {"error": "Organization not found for organization_slug."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        organization = None
+        if data.get("organization_slug"):
+            organization = Organization.objects.filter(slug=data["organization_slug"]).first()
+            if not organization:
+                return Response(
+                    {"error": "Organization not found for organization_slug."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         if UserProfile.objects.filter(username=data["username"]).exists():
             return Response({"error": "Username already exists."}, status=400)
@@ -69,6 +82,16 @@ class RegisterView(APIView):
             organization=organization,
         )
         token, _ = Token.objects.get_or_create(user=user)
+
+        if user.role == UserProfile.Role.PUBLISHER:
+            PublisherProfile.objects.get_or_create(
+                user=user,
+                defaults={
+                    "company_name": data["company_name"],
+                    "contact_email": data["contact_email"],
+                },
+            )
+
         return Response(
             {
                 "success": True,

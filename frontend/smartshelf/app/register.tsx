@@ -8,23 +8,26 @@ import { ThemedView } from '@/components/themed-view';
 import { ThemedTextInput } from '@/components/themed-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { setToken } from '@/services/api';
+import { useAuthStore } from '@/src/store/auth';
 
-type FieldName = 'name' | 'email' | 'password';
+type FieldName = 'name' | 'username' | 'email' | 'password';
 
 export default function RegisterScreen() {
   const [formData, setFormData] = useState({
     name: '',
+    username: '',
     email: '',
     password: '',
   });
   const [errors, setErrors] = useState<Record<FieldName, string | null>>({
     name: null,
+    username: null,
     email: null,
     password: null,
   });
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const signUp = useAuthStore((state) => state.signUp);
   const insets = useSafeAreaInsets();
   // Ref to track current field values to avoid stale state in onBlur
   const currentValuesRef = useRef(formData);
@@ -57,6 +60,15 @@ export default function RegisterScreen() {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(value)) {
           return 'Please enter a valid email address';
+        }
+        return null;
+
+      case 'username':
+        if (!value.trim()) {
+          return 'Username is required';
+        }
+        if (!/^[a-zA-Z0-9_]+$/.test(value)) {
+          return 'Only letters, numbers, and underscores allowed';
         }
         return null;
 
@@ -108,6 +120,7 @@ export default function RegisterScreen() {
     // Validate all fields
     const newErrors: Record<FieldName, string | null> = {
       name: validateField('name', formData.name),
+      username: validateField('username', formData.username),
       email: validateField('email', formData.email),
       password: validateField('password', formData.password),
     };
@@ -123,11 +136,15 @@ export default function RegisterScreen() {
     setIsLoading(true);
 
     try {
-      await setToken('local-auth-bypass');
+      await signUp({
+        fullName: formData.name.trim(),
+        username: formData.username.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+      });
       router.replace('/(tabs)');
     } catch (error: any) {
-      console.error('[Register] Failed to store auth:', error);
-      router.replace('/login');
+      console.error('[Register] Failed to register:', error);
     } finally {
       setIsLoading(false);
     }
@@ -137,11 +154,13 @@ export default function RegisterScreen() {
     // Reset form and navigate directly to login
     setFormData({
       name: '',
+      username: '',
       email: '',
       password: '',
     });
     setErrors({
       name: null,
+      username: null,
       email: null,
       password: null,
     });
@@ -217,6 +236,14 @@ export default function RegisterScreen() {
               'Enter your full name',
               undefined,
               { autoCapitalize: 'words' }
+            )}
+
+            {renderField(
+              'username',
+              'Username',
+              'Choose a username',
+              undefined,
+              { autoCapitalize: 'none' }
             )}
 
             {renderField(

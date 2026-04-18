@@ -1,5 +1,28 @@
 # SmartShelfRepo
 
+## Run backend with Docker Compose
+
+From the repository root:
+
+```bash
+docker compose up --build
+```
+
+Backend API: `http://localhost:8000`  
+PostgreSQL: `localhost:5432` (`postgres` / `postgres`, db `smartshelf`)
+
+To stop:
+
+```bash
+docker compose down
+```
+
+To stop and remove database volume:
+
+```bash
+docker compose down -v
+```
+
 from SmartShelfRepo folder (in terminal)
     for the backend:
         create a virtual environment (if you havent already). 

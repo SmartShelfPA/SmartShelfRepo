@@ -1,6 +1,7 @@
 from threading import local
 
 from django.db import models
+from django.db.models import Q
 
 _local = local()
 
@@ -18,7 +19,7 @@ class OrganizationScopedQuerySet(models.QuerySet):
         organization_id = get_current_organization_id()
         if organization_id is None:
             return self
-        return self.filter(organization_id=organization_id)
+        return self.filter(Q(organization_id=organization_id) | Q(organization_id__isnull=True))
 
 
 class OrganizationScopedManager(models.Manager):

@@ -1,7 +1,14 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from .models import Book, Category, Organization, ReadingProgress, UserProfile
+from .models import (
+    Book,
+    Category,
+    Organization,
+    PublisherProfile,
+    ReadingProgress,
+    UserProfile,
+)
 
 
 @admin.register(Organization)
@@ -48,10 +55,17 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(Book)
 class BookAdmin(admin.ModelAdmin):
-    list_display = ("id", "title", "author", "isbn", "organization")
+    list_display = ("id", "title", "author", "isbn", "publisher", "organization")
     list_filter = ("organization", "published_year")
     search_fields = ("title", "author", "isbn")
     filter_horizontal = ("category",)
+
+
+@admin.register(PublisherProfile)
+class PublisherProfileAdmin(admin.ModelAdmin):
+    list_display = ("id", "company_name", "contact_email", "is_verified", "created_at")
+    list_filter = ("is_verified",)
+    search_fields = ("company_name", "contact_email", "user__username")
 
 
 @admin.register(ReadingProgress)

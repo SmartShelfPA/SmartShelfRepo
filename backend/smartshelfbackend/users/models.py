@@ -26,6 +26,7 @@ class UserProfile(AbstractUser):
         STUDENT = "student", "Student"
         PARENT = "parent", "Parent"
         STAFF = "staff", "School Staff"
+        PUBLISHER = "publisher", "Publisher"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey(
@@ -70,7 +71,7 @@ class UserProfile(AbstractUser):
 class Category(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey(
-        Organization, on_delete=models.CASCADE, related_name="categories"
+        Organization, on_delete=models.CASCADE, related_name="categories", null=True, blank=True
     )
     name = models.CharField(max_length=120)
     slug = models.SlugField()
@@ -86,16 +87,25 @@ class Category(models.Model):
 class Book(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey(
-        Organization, on_delete=models.CASCADE, related_name="books"
+        Organization, on_delete=models.CASCADE, related_name="books", null=True, blank=True
+    )
+    publisher = models.ForeignKey(
+        UserProfile,
+        on_delete=models.SET_NULL,
+        related_name="published_books",
+        null=True,
+        blank=True,
     )
     isbn = models.CharField(max_length=20)
     title = models.CharField(max_length=255)
     author = models.CharField(max_length=255)
     cover_image_url = models.URLField(blank=True)
+    cover_image_file = models.FileField(upload_to="book-covers/", blank=True)
     description = models.TextField(blank=True)
     page_count = models.PositiveIntegerField()
     published_year = models.PositiveIntegerField(null=True, blank=True)
     category = models.ManyToManyField(Category, related_name="books", blank=True)
+    content_file = models.FileField(upload_to="book-content/", blank=True)
 
     objects = OrganizationScopedManager()
 
@@ -105,6 +115,27 @@ class Book(models.Model):
 
     def __str__(self) -> str:
         return f"{self.title} ({self.isbn})"
+
+
+class PublisherProfile(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(
+        UserProfile, on_delete=models.CASCADE, related_name="publisher_profile"
+    )
+    company_name = models.CharField(max_length=255)
+    contact_email = models.EmailField()
+    is_verified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["company_name"]
+
+    @property
+    def catalog_size(self) -> int:
+        return self.user.published_books.count()
+
+    def __str__(self) -> str:
+        return self.company_name
 
 
 class ReadingProgress(models.Model):

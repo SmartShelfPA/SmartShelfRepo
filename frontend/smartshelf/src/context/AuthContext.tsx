@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useMemo } from 'react';
+import { useAuthStore } from '@/src/store/auth';
 
 type User = {
   id: string;
@@ -18,34 +19,43 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const {
+    isAuthenticated,
+    user: stateUser,
+    isHydrating,
+    initialize,
+    signIn: signInStore,
+    signOut: signOutStore,
+  } = useAuthStore();
 
   useEffect(() => {
-    // TODO: hydrate auth state from storage / API
-    setLoading(false);
-  }, []);
+    initialize();
+  }, [initialize]);
 
-  const signIn = async (_email: string, _password: string) => {
-    // TODO: implement real sign-in with backend
-    setIsAuthenticated(true);
-    setUser({
-      id: 'demo-user',
-      email: _email,
-      fullName: 'Demo User',
-      username: 'demo',
-    });
+  const signIn = async (emailOrUsername: string, password: string) => {
+    await signInStore(emailOrUsername, password);
   };
 
   const signOut = async () => {
-    // TODO: clear tokens / storage
-    setIsAuthenticated(false);
-    setUser(null);
+    await signOutStore();
   };
 
+  const user: User | null = useMemo(() => {
+    if (!stateUser) {
+      return null;
+    }
+    return {
+      id: stateUser.id,
+      email: stateUser.email,
+      fullName: stateUser.full_name,
+      username: stateUser.username,
+    };
+  }, [stateUser]);
+
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, loading, signIn, signOut }}>
+    <AuthContext.Provider
+      value={{ isAuthenticated, user, loading: isHydrating, signIn, signOut }}
+    >
       {children}
     </AuthContext.Provider>
   );

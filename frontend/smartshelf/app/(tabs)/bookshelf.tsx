@@ -17,7 +17,7 @@ import { ThemedView } from '@/components/themed-view';
 import { ThemedTextInput } from '@/components/themed-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { addBook, Book, getBooks, setBooks } from '@/src/store/books';
+import { addBook, Book, getBooks, setBooks, useBooksStore } from '@/src/store/books';
 import { EXAM_SUBJECTS } from '@/constants/examSubjects';
 
 export default function BookshelfScreen() {
@@ -63,348 +63,32 @@ export default function BookshelfScreen() {
   const tintColor = colorScheme === 'dark' ? '#fff' : '#00FF41'; // UFO Green
   const tagBgColor = colorScheme === 'dark' ? '#2A2A2A' : '#E5E5E5';
 
+  const loadBooksFromApi = useBooksStore((state) => state.loadBooks);
+
   useEffect(() => {
-    const baseBooks: Book[] = [
-        // IGCSE core subjects
-        {
-          id: 'igcse-english',
-          title: 'IGCSE English Language',
-          subject: 'English',
-          examTags: ['IGCSE'],
-          coverUri: undefined,
-          author: 'Cambridge',
-        },
-        {
-          id: 'igcse-math',
-          title: 'IGCSE Mathematics',
-          subject: 'Mathematics',
-          examTags: ['IGCSE'],
-          coverUri: undefined,
-          author: 'Cambridge',
-        },
-        {
-          id: 'igcse-add-math',
-          title: 'IGCSE Additional Mathematics',
-          subject: 'Additional Mathematics',
-          examTags: ['IGCSE'],
-          coverUri: undefined,
-          author: 'Cambridge',
-        },
-        {
-          id: 'igcse-bio',
-          title: 'IGCSE Biology',
-          subject: 'Biology',
-          examTags: ['IGCSE'],
-          coverUri: undefined,
-          author: 'Cambridge',
-        },
-        {
-          id: 'igcse-physics',
-          title: 'IGCSE Physics',
-          subject: 'Physics',
-          examTags: ['IGCSE'],
-          coverUri: undefined,
-          author: 'Cambridge',
-        },
-        {
-          id: 'igcse-chem',
-          title: 'IGCSE Chemistry',
-          subject: 'Chemistry',
-          examTags: ['IGCSE'],
-          coverUri: undefined,
-          author: 'Cambridge',
-        },
-        {
-          id: 'igcse-ict',
-          title: 'IGCSE ICT/CS',
-          subject: 'ICT/CS',
-          examTags: ['IGCSE'],
-          coverUri: undefined,
-          author: 'Cambridge',
-        },
-        {
-          id: 'igcse-business',
-          title: 'IGCSE Business Studies',
-          subject: 'Business Studies',
-          examTags: ['IGCSE'],
-          coverUri: undefined,
-          author: 'Cambridge',
-        },
-        {
-          id: 'igcse-pe',
-          title: 'IGCSE Physical Education',
-          subject: 'Physical Education',
-          examTags: ['IGCSE'],
-          coverUri: undefined,
-          author: 'Cambridge',
-        },
-        {
-          id: 'igcse-accounting',
-          title: 'IGCSE Accounting',
-          subject: 'Accounting',
-          examTags: ['IGCSE'],
-          coverUri: undefined,
-          author: 'Cambridge',
-        },
-        {
-          id: 'igcse-econ',
-          title: 'IGCSE Economics',
-          subject: 'Economics',
-          examTags: ['IGCSE'],
-          coverUri: undefined,
-          author: 'Cambridge',
-        },
-        {
-          id: 'igcse-geo',
-          title: 'IGCSE Geography',
-          subject: 'Geography',
-          examTags: ['IGCSE'],
-          coverUri: undefined,
-          author: 'Cambridge',
-        },
-        {
-          id: 'igcse-history',
-          title: 'IGCSE History',
-          subject: 'History',
-          examTags: ['IGCSE'],
-          coverUri: undefined,
-          author: 'Cambridge',
-        },
-        {
-          id: 'igcse-gp',
-          title: 'IGCSE Global Perspectives',
-          subject: 'Global Perspectives',
-          examTags: ['IGCSE'],
-          coverUri: undefined,
-          author: 'Cambridge',
-        },
+    const load = async () => {
+      const existingBooks = getBooks();
+      const uploadedBooks = existingBooks.filter(
+        (book) => book.pdfUri || book.examTags.length === 0 || book.subject === 'Uploaded'
+      );
 
-        // WAEC core subjects
-        {
-          id: 'waec-english',
-          title: 'WAEC English Language',
-          subject: 'English',
-          examTags: ['WAEC'],
-          coverUri: undefined,
-          author: 'WAEC',
-        },
-        {
-          id: 'waec-math',
-          title: 'WAEC Mathematics',
-          subject: 'Mathematics',
-          examTags: ['WAEC'],
-          coverUri: undefined,
-          author: 'WAEC',
-        },
-        {
-          id: 'waec-bio',
-          title: 'WAEC Biology',
-          subject: 'Biology',
-          examTags: ['WAEC'],
-          coverUri: undefined,
-          author: 'WAEC',
-        },
-        {
-          id: 'waec-physics',
-          title: 'WAEC Physics',
-          subject: 'Physics',
-          examTags: ['WAEC'],
-          coverUri: undefined,
-          author: 'WAEC',
-        },
-        {
-          id: 'waec-chem',
-          title: 'WAEC Chemistry',
-          subject: 'Chemistry',
-          examTags: ['WAEC'],
-          coverUri: undefined,
-          author: 'WAEC',
-        },
-        {
-          id: 'waec-commerce',
-          title: 'WAEC Commerce',
-          subject: 'Commerce',
-          examTags: ['WAEC'],
-          coverUri: undefined,
-          author: 'WAEC',
-        },
-        {
-          id: 'waec-government',
-          title: 'WAEC Government',
-          subject: 'Government',
-          examTags: ['WAEC'],
-          coverUri: undefined,
-          author: 'WAEC',
-        },
-        {
-          id: 'waec-geo',
-          title: 'WAEC Geography',
-          subject: 'Geography',
-          examTags: ['WAEC'],
-          coverUri: undefined,
-          author: 'WAEC',
-        },
-        {
-          id: 'waec-agric',
-          title: 'WAEC Agricultural Science',
-          subject: 'Agricultural Science',
-          examTags: ['WAEC'],
-          coverUri: undefined,
-          author: 'WAEC',
-        },
-        {
-          id: 'waec-history',
-          title: 'WAEC History',
-          subject: 'History',
-          examTags: ['WAEC'],
-          coverUri: undefined,
-          author: 'WAEC',
-        },
-        {
-          id: 'waec-econ',
-          title: 'WAEC Economics',
-          subject: 'Economics',
-          examTags: ['WAEC'],
-          coverUri: undefined,
-          author: 'WAEC',
-        },
+      try {
+        await loadBooksFromApi();
+        const apiBooks = getBooks();
+        const merged = [
+          ...uploadedBooks,
+          ...apiBooks.filter((book) => !uploadedBooks.some((existing) => existing.id === book.id)),
+        ];
+        setBooks(merged);
+        setBooksState(merged);
+      } catch (error) {
+        console.error('[Bookshelf] Failed to load books from API:', error);
+        setBooksState(existingBooks);
+      }
+    };
 
-        // JAMB core subjects
-        {
-          id: 'jamb-english',
-          title: 'JAMB Use of English',
-          subject: 'Use of English',
-          examTags: ['JAMB'],
-          coverUri: undefined,
-          author: 'JAMB',
-        },
-        {
-          id: 'jamb-lit',
-          title: 'JAMB Literature in English',
-          subject: 'Literature in English',
-          examTags: ['JAMB'],
-          coverUri: undefined,
-          author: 'JAMB',
-        },
-        {
-          id: 'jamb-math',
-          title: 'JAMB Mathematics',
-          subject: 'Mathematics',
-          examTags: ['JAMB'],
-          coverUri: undefined,
-          author: 'JAMB',
-        },
-        {
-          id: 'jamb-bio',
-          title: 'JAMB Biology',
-          subject: 'Biology',
-          examTags: ['JAMB'],
-          coverUri: undefined,
-          author: 'JAMB',
-        },
-        {
-          id: 'jamb-physics',
-          title: 'JAMB Physics',
-          subject: 'Physics',
-          examTags: ['JAMB'],
-          coverUri: undefined,
-          author: 'JAMB',
-        },
-        {
-          id: 'jamb-chem',
-          title: 'JAMB Chemistry',
-          subject: 'Chemistry',
-          examTags: ['JAMB'],
-          coverUri: undefined,
-          author: 'JAMB',
-        },
-        {
-          id: 'jamb-commerce',
-          title: 'JAMB Commerce',
-          subject: 'Commerce',
-          examTags: ['JAMB'],
-          coverUri: undefined,
-          author: 'JAMB',
-        },
-        {
-          id: 'jamb-government',
-          title: 'JAMB Government',
-          subject: 'Government',
-          examTags: ['JAMB'],
-          coverUri: undefined,
-          author: 'JAMB',
-        },
-        {
-          id: 'jamb-geo',
-          title: 'JAMB Geography',
-          subject: 'Geography',
-          examTags: ['JAMB'],
-          coverUri: undefined,
-          author: 'JAMB',
-        },
-        {
-          id: 'jamb-agric',
-          title: 'JAMB Agricultural Science',
-          subject: 'Agricultural Science',
-          examTags: ['JAMB'],
-          coverUri: undefined,
-          author: 'JAMB',
-        },
-        {
-          id: 'jamb-history',
-          title: 'JAMB History',
-          subject: 'History',
-          examTags: ['JAMB'],
-          coverUri: undefined,
-          author: 'JAMB',
-        },
-        {
-          id: 'jamb-crs',
-          title: 'JAMB CRS (Christian Religious Studies)',
-          subject: 'CRS (Christian Religious Studies)',
-          examTags: ['JAMB'],
-          coverUri: undefined,
-          author: 'JAMB',
-        },
-        {
-          id: 'jamb-irs',
-          title: 'JAMB IRS (Islamic Religious Studies)',
-          subject: 'IRS (Islamic Religious Studies)',
-          examTags: ['JAMB'],
-          coverUri: undefined,
-          author: 'JAMB',
-        },
-        {
-          id: 'jamb-art',
-          title: 'JAMB Art',
-          subject: 'Art',
-          examTags: ['JAMB'],
-          coverUri: undefined,
-          author: 'JAMB',
-        },
-        {
-          id: 'jamb-econ',
-          title: 'JAMB Economics',
-          subject: 'Economics',
-          examTags: ['JAMB'],
-          coverUri: undefined,
-          author: 'JAMB',
-        },
-      ];
-
-    const existingBooks = getBooks();
-    const uploadedBooks = existingBooks.filter(
-      (book) => book.pdfUri || book.examTags.length === 0 || book.subject === 'Uploaded'
-    );
-
-    const merged = [
-      ...uploadedBooks,
-      ...baseBooks.filter((book) => !existingBooks.some((existing) => existing.id === book.id)),
-    ];
-
-    setBooks(merged);
-    setBooksState(merged);
-  }, []);
+    load();
+  }, [loadBooksFromApi]);
 
   useEffect(() => {
     if (sectionParam === 'Collection') {

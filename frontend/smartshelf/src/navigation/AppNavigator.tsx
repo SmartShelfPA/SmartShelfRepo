@@ -6,7 +6,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { AuthProvider, useAuth } from '../context/AuthContext';
+import { useAuthStore } from '../store/auth';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 // Reuse existing tab screens during migration (wrapped in /src/screens)
@@ -63,7 +63,7 @@ function MainTabs() {
 }
 
 function RootNavigator() {
-  const { loading } = useAuth();
+  const loading = useAuthStore((s) => s.isHydrating);
 
   if (loading) {
     return (
@@ -92,11 +92,9 @@ export default function AppNavigator() {
 
   return (
     <SafeAreaProvider>
-      <AuthProvider>
-        <NavigationContainer theme={navTheme}>
-          <RootNavigator />
-        </NavigationContainer>
-      </AuthProvider>
+      <NavigationContainer theme={navTheme}>
+        <RootNavigator />
+      </NavigationContainer>
     </SafeAreaProvider>
   );
 }
