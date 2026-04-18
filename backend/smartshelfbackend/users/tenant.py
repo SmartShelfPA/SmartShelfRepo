@@ -1,5 +1,6 @@
 from threading import local
 
+from django.contrib.auth.models import UserManager
 from django.db import models
 from django.db.models import Q
 
@@ -23,6 +24,16 @@ class OrganizationScopedQuerySet(models.QuerySet):
 
 
 class OrganizationScopedManager(models.Manager):
+    def get_queryset(self):
+        queryset = OrganizationScopedQuerySet(self.model, using=self._db)
+        if hasattr(self.model, "organization_id"):
+            return queryset.for_current_organization()
+        return queryset
+
+
+class OrganizationScopedUserManager(UserManager):
+    """Like OrganizationScopedManager but keeps UserManager.create_user / create_superuser."""
+
     def get_queryset(self):
         queryset = OrganizationScopedQuerySet(self.model, using=self._db)
         if hasattr(self.model, "organization_id"):

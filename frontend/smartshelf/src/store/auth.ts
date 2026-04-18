@@ -7,6 +7,7 @@ import {
   register,
   removeToken,
   setStoredProfile,
+  type RegisterPayload,
   UserProfile,
 } from '@/services/api';
 
@@ -17,13 +18,7 @@ type AuthState = {
   isAuthenticated: boolean;
   initialize: () => Promise<void>;
   signIn: (username: string, password: string) => Promise<void>;
-  signUp: (payload: {
-    fullName: string;
-    username: string;
-    email: string;
-    password: string;
-    dateOfBirth?: string;
-  }) => Promise<void>;
+  signUp: (payload: RegisterPayload) => Promise<void>;
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -45,14 +40,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ token, user, isAuthenticated: true });
   },
 
-  signUp: async ({ fullName, username, email, password, dateOfBirth }) => {
-    const result = await register(
-      fullName,
-      username,
-      password,
-      email,
-      dateOfBirth ?? '2008-01-01'
-    );
+  signUp: async (payload) => {
+    const result = await register(payload);
     const token = result?.token ?? (await getToken());
     const user = result?.user ?? null;
     set({ token, user, isAuthenticated: true });

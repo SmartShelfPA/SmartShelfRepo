@@ -4,7 +4,7 @@ from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models
 
-from .tenant import OrganizationScopedManager
+from .tenant import OrganizationScopedManager, OrganizationScopedUserManager
 
 
 class Organization(models.Model):
@@ -53,7 +53,7 @@ class UserProfile(AbstractUser):
         blank=True,
     )
 
-    objects = OrganizationScopedManager()
+    objects = OrganizationScopedUserManager()
 
     def clean(self) -> None:
         super().clean()

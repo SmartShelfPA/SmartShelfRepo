@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from users.models import Organization, PublisherProfile, UserProfile
-from users.serializers import UserProfileSerializer
+from users.serializers import OrganizationSerializer, UserProfileSerializer
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -44,6 +44,17 @@ class RegisterSerializer(serializers.Serializer):
                 "organization_slug is required for non-publisher users."
             )
         return attrs
+
+
+class OrganizationListPublicView(APIView):
+    """List schools for the registration form (unauthenticated)."""
+
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        organizations = Organization.objects.all().order_by("name")
+        return Response(OrganizationSerializer(organizations, many=True).data)
 
 
 class RegisterView(APIView):

@@ -1,0 +1,111 @@
+================================================================================
+SmartShelf — local test reference (credentials, URLs, one-time setup)
+================================================================================
+This file is for manual / QA testing only. Do not commit real production secrets.
+
+--------------------------------------------------------------------------------
+1) Run the stack (from repo root)
+--------------------------------------------------------------------------------
+  docker compose up --build
+
+  Backend HTTP:  http://localhost:8000
+  API prefix:    /api  (e.g. http://localhost:8000/api/auth/login/)
+  Django admin:  http://localhost:8000/admin/
+  PostgreSQL:    localhost:5432
+    Database:    smartshelf
+    User:        postgres
+    Password:    postgres
+
+--------------------------------------------------------------------------------
+2) One-time setup — organization for student/parent/staff signup
+--------------------------------------------------------------------------------
+The app registers students with organization_slug "default-school". That row
+must exist or registration returns "Organization not found".
+
+Create it once (Docker backend container running):
+
+  docker compose exec backend python manage.py shell -c "from users.models import Organization; Organization.objects.get_or_create(slug='default-school', defaults={'name': 'Default School', 'address': ''})"
+
+Or from a local venv (after migrate), same Python one-liner in manage.py shell.
+
+--------------------------------------------------------------------------------
+3) Suggested test accounts (examples — change if already used)
+--------------------------------------------------------------------------------
+Use these only on a disposable local database.
+
+  Student (recommended for UI login/register tests)
+    full_name:       Test Student
+    username:        teststudent
+    email:           teststudent@example.com
+    password:        TestPass123
+    date_of_birth:   2008-01-15        (ISO date; frontend sends string)
+    organization_slug: default-school
+    role:            student
+
+  Alternate student (second device / conflict tests)
+    username:        teststudent2
+    email:           teststudent2@example.com
+    password:        TestPass456
+
+  Publisher (no organization_slug; needs company fields)
+    role:            publisher
+    company_name:    Test Publishing Co
+    contact_email:   publisher@example.com
+    organization_slug: (omit or empty)
+
+  Staff (organization_slug required + extra fields)
+    role:            staff
+    organization_slug: default-school
+    staff_role:      Librarian
+    staff_department: Learning Resources
+
+Password rule: minimum 8 characters (backend validation).
+
+--------------------------------------------------------------------------------
+4) curl — register student (after org exists)
+--------------------------------------------------------------------------------
+  curl -s -X POST http://localhost:8000/api/auth/register/ ^
+    -H "Content-Type: application/json" ^
+    -d "{\"full_name\":\"Test Student\",\"username\":\"teststudent\",\"password\":\"TestPass123\",\"email\":\"teststudent@example.com\",\"date_of_birth\":\"2008-01-15\",\"organization_slug\":\"default-school\",\"role\":\"student\"}"
+
+On macOS/Linux use a single line or backslash continuation instead of ^.
+
+--------------------------------------------------------------------------------
+5) curl — login
+--------------------------------------------------------------------------------
+  curl -s -X POST http://localhost:8000/api/auth/login/ ^
+    -H "Content-Type: application/json" ^
+    -d "{\"username\":\"teststudent\",\"password\":\"TestPass123\"}"
+
+Response includes "token" and "user" on success.
+
+--------------------------------------------------------------------------------
+6) curl — validate token
+--------------------------------------------------------------------------------
+  curl -s http://localhost:8000/api/auth/validate/ ^
+    -H "Authorization: Token YOUR_TOKEN_HERE"
+
+--------------------------------------------------------------------------------
+7) Expo / mobile dev (frontend)
+--------------------------------------------------------------------------------
+  Repo: frontend/smartshelf
+  Start: npx expo start
+
+  The app picks the dev API host automatically (web, simulators, emulator,
+  physical device). Overrides if needed:
+
+    EXPO_PUBLIC_API_BASE_URL=http://YOUR_LAN_IP:8000/api
+    EXPO_PUBLIC_DEV_API_HOST=YOUR_LAN_IP
+    EXPO_PUBLIC_DEV_API_PORT=8000
+
+  Backend in Docker already listens on 0.0.0.0:8000 — phones on the same Wi‑Fi
+  can use your PC's LAN IP on port 8000.
+
+--------------------------------------------------------------------------------
+8) Admin superuser (optional — for Django admin only)
+--------------------------------------------------------------------------------
+  docker compose exec backend python manage.py createsuperuser
+
+================================================================================
+End of test reference
+================================================================================

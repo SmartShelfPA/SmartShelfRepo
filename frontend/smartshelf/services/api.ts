@@ -1,14 +1,13 @@
+import { getDevApiBaseUrl } from '@/src/lib/devApiBaseUrl';
 import { universalStorage } from '@/src/lib/universalStorage';
 
-// Backend API base URL - adjust this to match your backend server
-// For Android emulator: http://10.0.2.2:8000/api
-// For iOS simulator: http://localhost:8000/api
-// For physical device: http://YOUR_MACHINE_IP:8000/api (e.g. http://192.168.1.5:8000/api)
-const DEFAULT_LOCAL_API_BASE_URL = 'http://127.0.0.1:8000/api';
-
+// Dev URL is chosen in getDevApiBaseUrl() (web / simulators / emulator / physical device).
+// Override anytime: EXPO_PUBLIC_API_BASE_URL=http://192.168.1.5:8000/api
+// Physical device fallback if Expo host is missing: EXPO_PUBLIC_DEV_API_HOST=192.168.1.5
+// Optional port: EXPO_PUBLIC_DEV_API_PORT=8000
 export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ||
-  (__DEV__ ? DEFAULT_LOCAL_API_BASE_URL : 'https://your-production-api.com/api');
+  (__DEV__ ? getDevApiBaseUrl() : 'https://your-production-api.com/api');
 
 const REQUEST_TIMEOUT_MS = 10000;
 
@@ -23,6 +22,28 @@ const TOKEN_KEY = '@smartshelf:auth_token';
 const PROFILE_KEY = '@smartshelf:user_profile';
 
 export type UserRole = 'student' | 'parent' | 'staff' | 'publisher';
+
+export type SchoolOrganization = {
+  id: string;
+  name: string;
+  slug: string;
+  address: string;
+  created_at: string;
+};
+
+export type RegisterPayload = {
+  full_name: string;
+  username: string;
+  password: string;
+  email: string;
+  role: UserRole;
+  date_of_birth?: string | null;
+  organization_slug?: string;
+  staff_role?: string;
+  staff_department?: string;
+  company_name?: string;
+  contact_email?: string;
+};
 
 export type UserProfile = {
   id: string;
@@ -212,32 +233,81 @@ export const login = async (username: string, password: string) => {
   }
 };
 
+function formatApiValidationErrors(data: unknown): string {
+  if (!data || typeof data !== 'object') {
+    return 'Registration failed';
+  }
+  const d = data as Record<string, unknown>;
+  if (typeof d.detail === 'string') return d.detail;
+  if (typeof d.error === 'string') return d.error;
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(d)) {
+    if (key === 'success') continue;
+    if (Array.isArray(value)) {
+      parts.push(`${key}: ${value.join(' ')}`);
+    } else if (value && typeof value === 'object') {
+      const nested = formatApiValidationErrors(value);
+      if (nested) parts.push(nested);
+    } else if (typeof value === 'string') {
+      parts.push(`${key}: ${value}`);
+    }
+  }
+  return parts.join(' · ') || 'Registration failed';
+}
+
+/** Schools listed on the registration screen (public endpoint). */
+export const fetchOrganizations = async (): Promise<SchoolOrganization[]> => {
+  const response = await apiRequest('/auth/organizations/', { method: 'GET' });
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch {
+    throw new Error('Could not load schools (invalid response).');
+  }
+  if (!response.ok) {
+    const msg =
+      data && typeof data === 'object' && typeof (data as { error?: string }).error === 'string'
+        ? (data as { error: string }).error
+        : 'Could not load schools.';
+    throw new Error(msg);
+  }
+  if (!Array.isArray(data)) {
+    throw new Error('Could not load schools.');
+  }
+  return data as SchoolOrganization[];
+};
+
 /**
- * Register new user
+ * Register new user (all roles; payload must satisfy backend rules).
  */
-export const register = async (
-  full_name: string,
-  username: string,
-  password: string,
-  email: string,
-  date_of_birth: string,
-  organization_slug = 'default-school',
-  role: UserRole = 'student'
-) => {
+export const register = async (payload: RegisterPayload) => {
+  const { full_name, username, password, email, role } = payload;
   console.log('[API] Register request initiated for username:', username);
-  
+
+  const body: Record<string, unknown> = {
+    full_name,
+    username,
+    password,
+    email,
+    role,
+  };
+
+  const dob = payload.date_of_birth?.trim();
+  body.date_of_birth = dob && dob.length > 0 ? dob : null;
+
+  if (role === 'publisher') {
+    body.company_name = payload.company_name?.trim() ?? '';
+    body.contact_email = payload.contact_email?.trim() ?? '';
+  } else {
+    body.organization_slug = payload.organization_slug?.trim() ?? '';
+    body.staff_role = payload.staff_role?.trim() ?? '';
+    body.staff_department = payload.staff_department?.trim() ?? '';
+  }
+
   try {
     const response = await apiRequest('/auth/register/', {
       method: 'POST',
-      body: JSON.stringify({
-        full_name,
-        username,
-        password,
-        email,
-        date_of_birth,
-        organization_slug,
-        role,
-      }),
+      body: JSON.stringify(body),
     });
 
     const data = await response.json();
@@ -245,7 +315,7 @@ export const register = async (
 
     if (!response.ok) {
       console.error('[API] Register failed:', data);
-      throw new Error(data.error || 'Registration failed');
+      throw new Error(formatApiValidationErrors(data));
     }
 
     console.log('[API] Registration successful, token received');
@@ -253,7 +323,7 @@ export const register = async (
     if (data.user) {
       await setStoredProfile(data.user);
     }
-    
+
     return data;
   } catch (error) {
     console.error('[API] Register error:', error);
