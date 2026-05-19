@@ -1,0 +1,11 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  {% if import_manifest_url %}
+  <li>
+    <a href="{{ import_manifest_url }}" class="addlink">{% translate 'Import manifest' %}</a>
+  </li>
+  {% endif %}
+  {{ block.super }}
+{% endblock %}
