@@ -19,6 +19,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import path, include
 
+from learning.views import DashboardView
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/', include('auth.urls')),
@@ -26,6 +28,12 @@ urlpatterns = [
     path('api/pdf-proxy/', include('pdf_proxy.urls')),
     path('api/v1/auth/', include('auth.urls')),
     path('api/v1/', include('users.urls')),
+    # IGCSE EPUB reader + annotations (authenticated).
+    path('api/v1/igcse/', include('learning.igcse_urls')),
+    path('api/v1/practice/', include('learning.practice_urls')),
+    path('api/v1/dashboard/', DashboardView.as_view(), name='dashboard'),
+    # Canonical IGCSE study-agent catalog (subjects, chapters, sets, ingest).
+    path('api/igcse/', include('igcse_catalog.urls')),
 ]
 
 if settings.DEBUG:

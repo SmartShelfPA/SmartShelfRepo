@@ -44,6 +44,8 @@ INSTALLED_APPS = [
     'auth',
     'quotes',
     'pdf_proxy',
+    'learning',
+    'igcse_catalog',
 ]
 
 MIDDLEWARE = [
@@ -136,8 +138,14 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'users.UserProfile'
 
+# Dev only: omit Bearer token for this many minutes after Django starts (requires restart after change).
+# See users.auth_bypass / users.authentication.DevBypassAuthentication
+AUTH_FREE_FOR_MINUTES = int(os.getenv('AUTH_FREE_FOR_MINUTES', '0'))
+AUTH_BYPASS_USER_ID = os.getenv('AUTH_BYPASS_USER_ID', '').strip()
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'users.authentication.DevBypassAuthentication',
         'users.authentication.BearerTokenAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
@@ -145,8 +153,42 @@ REST_FRAMEWORK = {
     ],
 }
 
+from users.auth_bypass import configure_deadline_minutes  # noqa: E402
+
+configure_deadline_minutes(AUTH_FREE_FOR_MINUTES)
+
 # External quotes service (used by /api/quotes/random/)
 QUOTES_API_URL = os.getenv('QUOTES_API_URL', 'http://localhost:8080/')
+
+# ------------------------------------------------------------------------------
+# Learning / practice integrations (see learning/question_service.py)
+# ------------------------------------------------------------------------------
+# ALOC Questions API: https://github.com/Seunope/aloc-endpoints — hosted example https://questions.aloc.com.ng/api/v2/
+ALOC_API_BASE_URL = os.getenv('ALOC_API_BASE_URL', 'https://questions.aloc.com.ng/api/v2').rstrip('/')
+ALOC_ACCESS_TOKEN = os.getenv('ALOC_ACCESS_TOKEN', '')
+ALOC_REQUEST_TIMEOUT = float(os.getenv('ALOC_REQUEST_TIMEOUT', '15'))
+ALOC_EXAM_TYPE_WAEC = os.getenv('ALOC_EXAM_TYPE_WAEC', 'wassce')
+ALOC_EXAM_TYPE_JAMB = os.getenv('ALOC_EXAM_TYPE_JAMB', 'utme')
+
+# Practice shelf uses ALOC for WAEC/JAMB only (see learning/question_service.py).
+LEARNING_QUESTION_PROVIDER = os.getenv('LEARNING_QUESTION_PROVIDER', 'aloc')
+
+QUESTION_CACHE_TTL_SECONDS = int(os.getenv('QUESTION_CACHE_TTL_SECONDS', '3600'))
+
+# Optional JSON overrides for subject/year lists: '["chemistry","english"]'
+PRACTICE_SUBJECTS_WAEC_JSON = os.getenv('PRACTICE_SUBJECTS_WAEC_JSON', '')
+PRACTICE_SUBJECTS_JAMB_JSON = os.getenv('PRACTICE_SUBJECTS_JAMB_JSON', '')
+PRACTICE_YEARS_JSON = os.getenv('PRACTICE_YEARS_JSON', '')
+
+# Email settings (used by password reset flow).
+# Default writes emails to console in local/dev unless overridden by env.
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'no-reply@smartshelf.app')
+EMAIL_HOST = os.getenv('EMAIL_HOST', '')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'true').lower() == 'true'
 
 # Logging configuration
 LOGGING = {
