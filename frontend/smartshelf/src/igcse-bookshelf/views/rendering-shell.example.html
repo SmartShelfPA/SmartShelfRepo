@@ -1,0 +1,23 @@
+<!--
+  Reference: Open IGCSE / webity “rendering” layout (from upstream GitHub docs).
+  Not used by the Expo app — SmartShelf consumes JSON APIs; this documents the web shell pattern.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- renders views/meta.html -->
+  %{ include('$meta.html') }%
+  <!-- renders the title string -->
+  <title>%{ title }%</title>
+  %{ include('$lib.html') }%
+</head>
+<body>
+  %{ include('$appbar.html') }%
+  %{ include('$drawer.html') }%
+  <main class="mdc-top-app-bar--fixed-adjust">
+    <!-- renders ./content.html relative to the current webity path -->
+    %{ include('content.html') }%
+  </main>
+  %{ include('$root.html') }%
+</body>
+</html>

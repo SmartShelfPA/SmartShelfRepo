@@ -7,7 +7,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, Link } from 'expo-router';
+import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { ThemedText } from '@/components/themed-text';
@@ -17,8 +17,10 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { ParentDashboardData } from '@/src/types/parent';
 import { fetchParentDashboard } from '@/src/api/parent';
 import { ParentHeader, ParentSummaryCards } from '@/src/components/parent';
+import { useRequireAuth } from '@/src/hooks/useRequireAuth';
 
 export default function ParentView() {
+  useRequireAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
@@ -130,47 +132,58 @@ export default function ParentView() {
           totalItemsTracked={dashboard.totalItemsTracked ?? 0}
         />
 
-        {/* Student features: Exam boards & Sample papers */}
+        {/* Student features: Textbooks */}
         <View style={styles.section}>
           <ThemedText style={[styles.sectionTitle, { color: mutedTextColor }]}>
-            EXAM BOARDS
+            TEXTBOOKS
           </ThemedText>
           <View style={styles.examBoardRow}>
-            {[
-              { label: 'IGCSE', icon: 'school' },
-              { label: 'WAEC', icon: 'menu-book' },
-              { label: 'JAMB', icon: 'edit-note' },
-            ].map((board) => (
+            {[{ label: 'IGCSE shelf', subtitle: 'Coming soon', icon: 'auto-stories' }].map((board) => (
               <TouchableOpacity
                 key={board.label}
                 style={[styles.examBoardIcon, { borderColor: tintColor, backgroundColor: cardBgColor }]}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push({
-                    pathname: '/(tabs)/bookshelf',
-                    params: { board: board.label, section: 'Textbooks' },
-                  });
+                  router.push('/igcse-coming-soon');
                 }}
                 activeOpacity={0.8}>
                 <MaterialIcons name={board.icon as any} size={24} color={tintColor} />
                 <ThemedText style={styles.examBoardLabel}>{board.label}</ThemedText>
+                {'subtitle' in board && board.subtitle ? (
+                  <ThemedText style={[styles.examBoardSubtitle, { color: mutedTextColor }]}>
+                    {board.subtitle}
+                  </ThemedText>
+                ) : null}
               </TouchableOpacity>
             ))}
           </View>
         </View>
 
-        <Link href="/sample-papers" asChild>
-          <TouchableOpacity
-            style={[styles.featureCard, { borderColor: tagBgColor, backgroundColor: cardBgColor }]}
-            onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-            activeOpacity={0.8}>
-            <MaterialIcons name="picture-as-pdf" size={24} color={tintColor} />
-            <ThemedText style={[styles.featureCardLabel, { color: textColor }]}>
-              Sample Papers
-            </ThemedText>
-            <MaterialIcons name="chevron-right" size={20} color={tintColor} />
-          </TouchableOpacity>
-        </Link>
+        <View style={styles.section}>
+          <ThemedText style={[styles.sectionTitle, { color: mutedTextColor }]}>
+            PRACTICE
+          </ThemedText>
+          <View style={styles.examBoardRow}>
+            {[
+              { label: 'WAEC', icon: 'edit-note' },
+              { label: 'JAMB', icon: 'edit-note' },
+            ].map((item) => (
+              <TouchableOpacity
+                key={item.label}
+                style={[styles.examBoardIcon, { borderColor: tintColor, backgroundColor: cardBgColor }]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push(
+                    item.label === 'WAEC' ? '/practice/waec' : '/practice/jamb'
+                  );
+                }}
+                activeOpacity={0.8}>
+                <MaterialIcons name={item.icon as any} size={24} color={tintColor} />
+                <ThemedText style={styles.examBoardLabel}>{item.label}</ThemedText>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
 
         {/* Progress Tracking */}
         <TouchableOpacity
@@ -319,6 +332,11 @@ const styles = StyleSheet.create({
   examBoardLabel: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  examBoardSubtitle: {
+    fontSize: 10,
+    fontWeight: '600',
+    opacity: 0.75,
   },
   featureCard: {
     flexDirection: 'row',

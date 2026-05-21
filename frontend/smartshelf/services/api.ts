@@ -2,12 +2,16 @@ import { getDevApiBaseUrl } from '@/src/lib/devApiBaseUrl';
 import { universalStorage } from '@/src/lib/universalStorage';
 
 // Dev URL is chosen in getDevApiBaseUrl() (web / simulators / emulator / physical device).
-// Override anytime: EXPO_PUBLIC_API_BASE_URL=http://192.168.1.5:8000/api
+// Override anytime: EXPO_PUBLIC_API_BASE_URL=https://your-tunnel.ngrok-free.dev/api
 // Physical device fallback if Expo host is missing: EXPO_PUBLIC_DEV_API_HOST=192.168.1.5
 // Optional port: EXPO_PUBLIC_DEV_API_PORT=8000
 export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_BASE_URL ||
   (__DEV__ ? getDevApiBaseUrl() : 'https://your-production-api.com/api');
+
+/** ngrok free tier: skip interstitial for programmatic requests */
+export const getApiExtraHeaders = (): Record<string, string> =>
+  API_BASE_URL.includes('ngrok') ? { 'ngrok-skip-browser-warning': 'true' } : {};
 
 const REQUEST_TIMEOUT_MS = 10000;
 
@@ -17,9 +21,9 @@ export const getBackendBaseUrl = (): string => {
   return url || API_BASE_URL;
 };
 
-// Legacy disk keys (cleared on sign-out / startup; session token is in-memory only)
 const TOKEN_KEY = '@smartshelf:auth_token';
 const PROFILE_KEY = '@smartshelf:user_profile';
+const STAY_LOGGED_IN_KEY = '@smartshelf:stay_logged_in';
 
 export type UserRole = 'student' | 'parent' | 'staff' | 'publisher';
 
@@ -38,6 +42,8 @@ export type RegisterPayload = {
   email: string;
   role: UserRole;
   date_of_birth?: string | null;
+  student_class?: string;
+  linked_student_username?: string;
   organization_slug?: string;
   staff_role?: string;
   staff_department?: string;
@@ -52,6 +58,7 @@ export type UserProfile = {
   role: UserRole;
   full_name: string;
   date_of_birth?: string | null;
+  student_class?: string;
   avatar_url?: string;
   staff_role?: string;
   staff_department?: string;
@@ -60,6 +67,7 @@ export type UserProfile = {
 
 let sessionToken: string | null = null;
 let sessionProfile: UserProfile | null = null;
+let storageHydrated = false;
 
 export type PublisherProfile = {
   id: string;
@@ -95,32 +103,96 @@ export type BookshelfItem = {
   progress: ReadingProgress;
 };
 
-/**
- * Session token (memory only — reload requires sign-in again).
- */
-export const getToken = async (): Promise<string | null> => sessionToken;
+async function hydrateSessionFromDisk(): Promise<void> {
+  if (storageHydrated) return;
+  storageHydrated = true;
+  const stayLoggedIn = await universalStorage.getItem(STAY_LOGGED_IN_KEY);
+  if (stayLoggedIn === 'false') return;
+  const [token, profileRaw] = await Promise.all([
+    universalStorage.getItem(TOKEN_KEY),
+    universalStorage.getItem(PROFILE_KEY),
+  ]);
+  if (token) sessionToken = token;
+  if (profileRaw) {
+    try {
+      sessionProfile = JSON.parse(profileRaw) as UserProfile;
+    } catch {
+      sessionProfile = null;
+    }
+  }
+}
 
-export const setToken = async (token: string): Promise<void> => {
+/** Load token/profile from device storage when stay logged in is enabled. */
+export const hydrateAuthSession = async (): Promise<void> => {
+  await hydrateSessionFromDisk();
+};
+
+export const getStayLoggedInPreference = async (): Promise<boolean> => {
+  const value = await universalStorage.getItem(STAY_LOGGED_IN_KEY);
+  return value !== 'false';
+};
+
+export const setStayLoggedInPreference = async (enabled: boolean): Promise<void> => {
+  await universalStorage.setItem(STAY_LOGGED_IN_KEY, enabled ? 'true' : 'false');
+  if (!enabled) {
+    await universalStorage.removeItem(TOKEN_KEY);
+    await universalStorage.removeItem(PROFILE_KEY);
+  }
+};
+
+export type PersistSessionOptions = {
+  /** When false, session lasts until app restart only. Default true. */
+  persist?: boolean;
+};
+
+export const getToken = async (): Promise<string | null> => {
+  await hydrateSessionFromDisk();
+  return sessionToken;
+};
+
+export const setToken = async (
+  token: string,
+  options: PersistSessionOptions = {}
+): Promise<void> => {
+  const persist = options.persist !== false;
   sessionToken = token;
+  await setStayLoggedInPreference(persist);
+  if (persist) {
+    await universalStorage.setItem(TOKEN_KEY, token);
+  } else {
+    await universalStorage.removeItem(TOKEN_KEY);
+  }
 };
 
-export const getStoredProfile = async (): Promise<UserProfile | null> => sessionProfile;
+export const getStoredProfile = async (): Promise<UserProfile | null> => {
+  await hydrateSessionFromDisk();
+  return sessionProfile;
+};
 
-export const setStoredProfile = async (profile: UserProfile): Promise<void> => {
+export const setStoredProfile = async (
+  profile: UserProfile,
+  options: PersistSessionOptions = {}
+): Promise<void> => {
+  const persist = options.persist !== false;
   sessionProfile = profile;
+  if (persist) {
+    await universalStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  } else {
+    await universalStorage.removeItem(PROFILE_KEY);
+  }
 };
 
-/**
- * Clears session and any legacy persisted auth keys (native + web).
- */
+/** Clears session and persisted auth keys. */
 export const removeToken = async (): Promise<void> => {
   sessionToken = null;
   sessionProfile = null;
+  storageHydrated = false;
   await universalStorage.removeItem(TOKEN_KEY);
   await universalStorage.removeItem(PROFILE_KEY);
+  await universalStorage.removeItem(STAY_LOGGED_IN_KEY);
 };
 
-/** Remove disk-only auth keys (e.g. after upgrade from persisted-token builds). */
+/** Remove disk-only auth keys without clearing in-memory session. */
 export const clearPersistedAuthFromDisk = async (): Promise<void> => {
   await universalStorage.removeItem(TOKEN_KEY);
   await universalStorage.removeItem(PROFILE_KEY);
@@ -157,6 +229,7 @@ export const apiRequest = async (
   const token = await getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    ...getApiExtraHeaders(),
     ...(options.headers as Record<string, string> | undefined),
   };
 
@@ -203,7 +276,11 @@ export const validateToken = async (): Promise<boolean> => {
 /**
  * Login user
  */
-export const login = async (username: string, password: string) => {
+export const login = async (
+  username: string,
+  password: string,
+  options: PersistSessionOptions = {}
+) => {
   console.log('[API] Login request initiated for username:', username);
   
   try {
@@ -221,9 +298,10 @@ export const login = async (username: string, password: string) => {
     }
 
     console.log('[API] Login successful, token received');
-    await setToken(data.token);
+    const persist = options?.persist !== false;
+    await setToken(data.token, { persist });
     if (data.user) {
-      await setStoredProfile(data.user);
+      await setStoredProfile(data.user, { persist });
     }
     
     return data;
@@ -255,9 +333,29 @@ function formatApiValidationErrors(data: unknown): string {
   return parts.join(' · ') || 'Registration failed';
 }
 
-/** Schools listed on the registration screen (public endpoint). */
+/** Schools listed on the registration screen (public endpoint, no auth). */
 export const fetchOrganizations = async (): Promise<SchoolOrganization[]> => {
-  const response = await apiRequest('/auth/organizations/', { method: 'GET' });
+  const root = API_BASE_URL.replace(/\/+$/, '');
+  const url = `${root}/auth/organizations/`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json', ...getApiExtraHeaders() },
+      signal: controller.signal,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Network error';
+    throw new Error(
+      `Could not reach SmartShelf API (${url}). Check EXPO_PUBLIC_API_BASE_URL. ${msg}`
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+
   let data: unknown;
   try {
     data = await response.json();
@@ -268,11 +366,11 @@ export const fetchOrganizations = async (): Promise<SchoolOrganization[]> => {
     const msg =
       data && typeof data === 'object' && typeof (data as { error?: string }).error === 'string'
         ? (data as { error: string }).error
-        : 'Could not load schools.';
+        : `Could not load schools (${response.status}).`;
     throw new Error(msg);
   }
   if (!Array.isArray(data)) {
-    throw new Error('Could not load schools.');
+    throw new Error('Could not load schools (unexpected response).');
   }
   return data as SchoolOrganization[];
 };
@@ -280,7 +378,10 @@ export const fetchOrganizations = async (): Promise<SchoolOrganization[]> => {
 /**
  * Register new user (all roles; payload must satisfy backend rules).
  */
-export const register = async (payload: RegisterPayload) => {
+export const register = async (
+  payload: RegisterPayload,
+  options: PersistSessionOptions = { persist: true }
+) => {
   const { full_name, username, password, email, role } = payload;
   console.log('[API] Register request initiated for username:', username);
 
@@ -300,6 +401,8 @@ export const register = async (payload: RegisterPayload) => {
     body.contact_email = payload.contact_email?.trim() ?? '';
   } else {
     body.organization_slug = payload.organization_slug?.trim() ?? '';
+    body.student_class = payload.student_class?.trim() ?? '';
+    body.linked_student_username = payload.linked_student_username?.trim() ?? '';
     body.staff_role = payload.staff_role?.trim() ?? '';
     body.staff_department = payload.staff_department?.trim() ?? '';
   }
@@ -319,9 +422,10 @@ export const register = async (payload: RegisterPayload) => {
     }
 
     console.log('[API] Registration successful, token received');
-    await setToken(data.token);
+    const persist = options.persist !== false;
+    await setToken(data.token, { persist });
     if (data.user) {
-      await setStoredProfile(data.user);
+      await setStoredProfile(data.user, { persist });
     }
 
     return data;
@@ -331,32 +435,106 @@ export const register = async (payload: RegisterPayload) => {
   }
 };
 
-export const getProfile = async (): Promise<UserProfile | PublisherProfile> => {
-  const response = await apiRequest('/v1/profile/');
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Failed to fetch profile');
-  }
-  if ('username' in data) {
-    await setStoredProfile(data as UserProfile);
-  }
-  return data;
+export type PasswordResetRequestResult = {
+  message: string;
+  debugResetCode?: string;
 };
 
-export const fetchBooks = async (params?: {
+export const requestPasswordResetCode = async (
+  email: string
+): Promise<PasswordResetRequestResult> => {
+  const response = await apiRequest('/auth/password-reset/request/', {
+    method: 'POST',
+    body: JSON.stringify({ email: email.trim() }),
+  });
+  let data: Record<string, unknown> | null = null;
+  try {
+    data = (await response.json()) as Record<string, unknown>;
+  } catch {
+    // ignore parse errors and throw fallback below
+  }
+  if (!response.ok) {
+    const message =
+      data && typeof data === 'object' && typeof (data as { error?: string }).error === 'string'
+        ? (data as { error: string }).error
+        : 'Failed to send reset code';
+    throw new Error(message);
+  }
+  return {
+    message:
+      data && typeof data.message === 'string'
+        ? data.message
+        : 'If that email exists, a reset code has been sent.',
+    debugResetCode:
+      data && typeof data.debug_reset_code === 'string' ? data.debug_reset_code : undefined,
+  };
+};
+
+export const confirmPasswordReset = async (
+  email: string,
+  code: string,
+  newPassword: string
+): Promise<void> => {
+  const response = await apiRequest('/auth/password-reset/confirm/', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: email.trim(),
+      code: code.trim(),
+      new_password: newPassword,
+    }),
+  });
+  let data: unknown = null;
+  try {
+    data = await response.json();
+  } catch {
+    // ignore parse errors and throw fallback below
+  }
+  if (!response.ok) {
+    const message =
+      data && typeof data === 'object' && typeof (data as { error?: string }).error === 'string'
+        ? (data as { error: string }).error
+        : 'Failed to reset password';
+    throw new Error(message);
+  }
+};
+
+function profileErrorMessage(data: unknown, status: number): string {
+  if (data && typeof data === 'object') {
+    const o = data as Record<string, unknown>;
+    if (typeof o.error === 'string' && o.error) return o.error;
+    if (typeof o.detail === 'string' && o.detail) return o.detail;
+  }
+  if (status === 401) {
+    return 'Session expired. Sign in again.';
+  }
+  if (status === 404) {
+    return 'Profile not found on the server.';
+  }
+  return `Failed to fetch profile (${status})`;
+}
+
+export const getProfile = async (): Promise<UserProfile | PublisherProfile> => {
+  const token = await getToken();
+  if (!token) {
+    throw new Error('Not signed in');
+  }
+
+  const response = await apiRequest('/v1/profile/');
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(profileErrorMessage(data, response.status));
+  }
+  if (data && typeof data === 'object' && 'username' in data) {
+    await setStoredProfile(data as UserProfile, { persist: true });
+  }
+  return data as UserProfile | PublisherProfile;
+};
+
+export const fetchBooks = async (_params?: {
   search?: string;
   category?: string;
 }): Promise<Book[]> => {
-  const query = new URLSearchParams();
-  if (params?.search) query.set('search', params.search);
-  if (params?.category) query.set('category', params.category);
-  const suffix = query.toString() ? `?${query.toString()}` : '';
-  const response = await apiRequest(`/v1/books/${suffix}`);
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || 'Failed to fetch books');
-  }
-  return data as Book[];
+  return [];
 };
 
 export const fetchBookshelf = async (): Promise<BookshelfItem[]> => {

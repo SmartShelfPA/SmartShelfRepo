@@ -30,7 +30,9 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files (never commit secrets; EXPO_PUBLIC_* is still bundled into the client)
+.env
+.env.local
 .env*.local
 
 # typescript

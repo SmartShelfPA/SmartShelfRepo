@@ -81,107 +81,40 @@ export const IGCSE_SUBJECTS: ExamBoardSubjects = {
   ],
 };
 
-/** WAEC (WASSCE) - Official approved subjects */
-export const WAEC_SUBJECTS: ExamBoardSubjects = {
+/** WAEC/JAMB shared bookshelf subjects */
+export const WAEC_JAMB_SUBJECTS: ExamBoardSubjects = {
   groups: [
     {
-      name: 'Core & Compulsory',
+      name: 'Subjects',
       subjects: [
-        { key: 'English', label: 'English Language' },
-        { key: 'Mathematics', label: 'General Mathematics' },
-        { key: 'Civic Education', label: 'Civic Education' },
-      ],
-    },
-    {
-      name: 'Sciences',
-      subjects: [
-        { key: 'Biology', label: 'Biology' },
-        { key: 'Chemistry', label: 'Chemistry' },
-        { key: 'Physics', label: 'Physics' },
-        { key: 'Agricultural Science', label: 'Agriculture' },
-      ],
-    },
-    {
-      name: 'Humanities & Social Sciences',
-      subjects: [
+        { key: 'English', label: 'English language' },
+        { key: 'Mathematics', label: 'Mathematics' },
         { key: 'Commerce', label: 'Commerce' },
         { key: 'Accounting', label: 'Accounting' },
-        { key: 'Christian Religious Studies', label: 'Christian Religious Studies' },
-        { key: 'Islamic Studies', label: 'Islamic Studies' },
-        { key: 'Economics', label: 'Economics' },
-        { key: 'Geography', label: 'Geography' },
+        { key: 'Biology', label: 'Biology' },
+        { key: 'Physics', label: 'Physics' },
+        { key: 'Chemistry', label: 'Chemistry' },
+        { key: 'Literature in English', label: 'English literature' },
         { key: 'Government', label: 'Government' },
-        { key: 'Literature in English', label: 'Literature in English' },
+        { key: 'Christian Religious Knowledge', label: 'Christian Religious Knowledge' },
+        { key: 'Geography', label: 'Geography' },
+        { key: 'Economics', label: 'Economics' },
+        { key: 'Islamic Religious Knowledge', label: 'Islamic Religious Knowledge' },
+        { key: 'Civic Education', label: 'Civic Education' },
+        { key: 'Insurance', label: 'Insurance' },
+        { key: 'Current Affairs', label: 'Current Affairs' },
         { key: 'History', label: 'History' },
-      ],
-    },
-    {
-      name: 'Languages',
-      subjects: [
-        { key: 'Hausa', label: 'Hausa' },
-        { key: 'Igbo', label: 'Igbo' },
-        { key: 'Yoruba', label: 'Yoruba' },
-      ],
-    },
-    {
-      name: 'Mathematics (Advanced)',
-      subjects: [
-        { key: 'Further Mathematics', label: 'Further Mathematics' },
       ],
     },
   ],
 };
 
-/** JAMB (UTME) - Common subjects by course type */
-export const JAMB_SUBJECTS: ExamBoardSubjects = {
-  groups: [
-    {
-      name: 'Compulsory',
-      subjects: [
-        { key: 'Use of English', label: 'Use of English (Compulsory for all)' },
-      ],
-    },
-    {
-      name: 'Medicine & Health Sciences',
-      subjects: [
-        { key: 'Biology', label: 'Biology' },
-        { key: 'Chemistry', label: 'Chemistry' },
-        { key: 'Physics', label: 'Physics' },
-      ],
-    },
-    {
-      name: 'Engineering',
-      subjects: [
-        { key: 'Mathematics', label: 'Mathematics' },
-        { key: 'Physics', label: 'Physics' },
-        { key: 'Chemistry', label: 'Chemistry' },
-      ],
-    },
-    {
-      name: 'Social Sciences & Arts',
-      subjects: [
-        { key: 'Economics', label: 'Economics' },
-        { key: 'Government', label: 'Government' },
-        { key: 'History', label: 'History' },
-        { key: 'Geography', label: 'Geography' },
-        { key: 'Literature in English', label: 'Literature in English' },
-        { key: 'CRS (Christian Religious Studies)', label: 'Christian Religious Studies (CRS)' },
-        { key: 'IRS (Islamic Religious Studies)', label: 'Islamic Religious Studies (IRS)' },
-        { key: 'Commerce', label: 'Commerce' },
-        { key: 'Art', label: 'Art' },
-      ],
-    },
-    {
-      name: 'Sciences & Agriculture',
-      subjects: [
-        { key: 'Agricultural Science', label: 'Agricultural Science' },
-      ],
-    },
-  ],
-};
+export const WAEC_SUBJECTS = WAEC_JAMB_SUBJECTS;
+export const JAMB_SUBJECTS = WAEC_JAMB_SUBJECTS;
 
 export const EXAM_SUBJECTS: Record<string, ExamBoardSubjects> = {
   IGCSE: IGCSE_SUBJECTS,
+  'WAEC/JAMB': WAEC_JAMB_SUBJECTS,
   WAEC: WAEC_SUBJECTS,
   JAMB: JAMB_SUBJECTS,
 };

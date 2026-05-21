@@ -21,11 +21,13 @@ const fallbackQuotes: Quote[] = [
 const getRandomFallback = () =>
   fallbackQuotes[Math.floor(Math.random() * fallbackQuotes.length)];
 
-import { API_BASE_URL } from './api';
+import { API_BASE_URL, getApiExtraHeaders } from './api';
 
 export const fetchQuote = async (): Promise<Quote> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/quotes/random/`);
+    const response = await fetch(`${API_BASE_URL}/quotes/random/`, {
+      headers: getApiExtraHeaders(),
+    });
     if (!response.ok) {
       return getRandomFallback();
     }

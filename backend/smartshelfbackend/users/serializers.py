@@ -32,6 +32,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "role",
             "full_name",
             "date_of_birth",
+            "student_class",
             "avatar_url",
             "staff_role",
             "staff_department",

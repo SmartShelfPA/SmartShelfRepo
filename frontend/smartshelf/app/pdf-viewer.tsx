@@ -262,7 +262,7 @@ export default function PdfViewerScreen() {
         width: stickyModal.width,
         height: stickyModal.height,
         text: text.trim() || 'Note',
-      });
+      } as Omit<PdfAnnotation, 'id'>);
       setStickyModal(null);
       setStickyText('');
       injectTool('none');
@@ -445,11 +445,7 @@ export default function PdfViewerScreen() {
             setStickyModal(null);
             setStickyText('');
           }}>
-          <TouchableOpacity
-            style={styles.modalContent}
-            activeOpacity={1}
-            onPress={() => {}}
-            onStartShouldSetResponder={() => true}>
+          <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Sticky Note</Text>
             <TextInput
               style={styles.modalInput}
@@ -475,7 +471,7 @@ export default function PdfViewerScreen() {
                 <Text style={[styles.modalBtnText, { color: '#000' }]}>Save</Text>
               </TouchableOpacity>
             </View>
-          </TouchableOpacity>
+          </View>
         </TouchableOpacity>
       </Modal>
     </View>

@@ -17,15 +17,17 @@ import { ThemedView } from '@/components/themed-view';
 import { ThemedText } from '@/components/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import { useProfileAvatar } from '@/src/hooks/useProfileAvatar';
 import { useAuthStore } from '@/src/store/auth';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const user = useAuthStore((state) => state.user);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isHydrating = useAuthStore((state) => state.isHydrating);
   const refreshProfile = useAuthStore((state) => state.refreshProfile);
   const signOut = useAuthStore((state) => state.signOut);
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const { avatarUri, userInitials, displayName, saveFromPickerUri } = useProfileAvatar();
   const [showAchievements, setShowAchievements] = useState(false);
   const colorScheme = useColorScheme();
   const textColor = useThemeColor({}, 'text');
@@ -35,18 +37,9 @@ export default function ProfileScreen() {
   const accentColor = '#00FF41';
 
   useEffect(() => {
-    refreshProfile().catch((error) => {
-      console.error('[Profile] Failed to refresh profile:', error);
-    });
-  }, [refreshProfile]);
-
-  const displayName = user?.full_name || 'SmartShelf User';
-  const initials = displayName
-    .split(' ')
-    .map((part: string) => part[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+    if (isHydrating || !isAuthenticated) return;
+    void refreshProfile();
+  }, [refreshProfile, isHydrating, isAuthenticated]);
 
   const handlePickImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -63,7 +56,7 @@ export default function ProfileScreen() {
     });
 
     if (!result.canceled && result.assets?.[0]?.uri) {
-      setAvatarUri(result.assets[0].uri);
+      await saveFromPickerUri(result.assets[0].uri);
     }
   };
 
@@ -91,7 +84,7 @@ export default function ProfileScreen() {
             ) : (
               <View style={[styles.avatarPlaceholder, { borderColor: accentColor }]}>
                 <ThemedText style={[styles.avatarText, { color: textColor }]}>
-                  {initials}
+                  {userInitials}
                 </ThemedText>
               </View>
             )}
@@ -114,13 +107,6 @@ export default function ProfileScreen() {
                 router.replace('/account-select');
               },
             },
-            {
-              label: 'SAMPLE PAPERS',
-              action: () => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push('/sample-papers');
-              },
-            },
             { label: 'MY BIO', action: () => Alert.alert('My Bio', 'Coming soon.') },
             { label: 'CHANGE PASSWORD', action: () => Alert.alert('Change Password', 'Coming soon.') },
             { label: 'MY ACHIEVEMENTS', action: () => setShowAchievements(true) },
@@ -140,7 +126,7 @@ export default function ProfileScreen() {
           style={[styles.logoutButton, { backgroundColor: cardBgColor, borderColor }]}
           onPress={async () => {
             await signOut();
-            router.replace('/login');
+            router.replace('/account-select');
           }}
           activeOpacity={0.8}>
           <ThemedText style={[styles.logoutText, { color: accentColor }]}>Logout</ThemedText>

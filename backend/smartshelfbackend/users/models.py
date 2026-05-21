@@ -39,6 +39,7 @@ class UserProfile(AbstractUser):
     role = models.CharField(max_length=20, choices=Role.choices)
     full_name = models.CharField(max_length=255)
     date_of_birth = models.DateField(null=True, blank=True)
+    student_class = models.CharField(max_length=120, blank=True)
     avatar_url = models.URLField(blank=True)
 
     # Staff-specific fields

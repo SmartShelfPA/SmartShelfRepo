@@ -15,11 +15,13 @@ import { useRouter } from 'expo-router';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { PasswordInput } from '@/components/password-input';
 import { ThemedTextInput } from '@/components/themed-text-input';
 import { Colors } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthStore } from '@/src/store/auth';
+import { getPortalChoice, type PortalChoice } from '@/src/lib/portalChoice';
 import {
   fetchOrganizations,
   type SchoolOrganization,
@@ -29,18 +31,10 @@ import {
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: 'student', label: 'Student' },
   { value: 'parent', label: 'Parent / guardian' },
-  { value: 'staff', label: 'School staff' },
-  { value: 'publisher', label: 'Publisher' },
 ];
 
 type SimpleField = 'name' | 'username' | 'email' | 'password';
-type ExtraField =
-  | 'dateOfBirth'
-  | 'organization'
-  | 'staffRole'
-  | 'staffDepartment'
-  | 'companyName'
-  | 'contactEmail';
+type ExtraField = 'dateOfBirth' | 'organization' | 'studentClass' | 'linkedStudentUsername';
 
 type FormErrors = Record<SimpleField | ExtraField, string | null>;
 
@@ -51,10 +45,8 @@ const emptyErrors = (): FormErrors => ({
   password: null,
   dateOfBirth: null,
   organization: null,
-  staffRole: null,
-  staffDepartment: null,
-  companyName: null,
-  contactEmail: null,
+  studentClass: null,
+  linkedStudentUsername: null,
 });
 
 function validateDateOfBirth(value: string, required: boolean): string | null {
@@ -83,11 +75,9 @@ export default function RegisterScreen() {
   });
   const [role, setRole] = useState<UserRole>('student');
   const [dateOfBirth, setDateOfBirth] = useState('');
+  const [studentClass, setStudentClass] = useState('');
+  const [linkedStudentUsername, setLinkedStudentUsername] = useState('');
   const [selectedOrgSlug, setSelectedOrgSlug] = useState<string | null>(null);
-  const [staffRole, setStaffRole] = useState('');
-  const [staffDepartment, setStaffDepartment] = useState('');
-  const [companyName, setCompanyName] = useState('');
-  const [contactEmail, setContactEmail] = useState('');
 
   const [organizations, setOrganizations] = useState<SchoolOrganization[]>([]);
   const [orgsLoading, setOrgsLoading] = useState(true);
@@ -100,12 +90,21 @@ export default function RegisterScreen() {
 
   const router = useRouter();
   const signUp = useAuthStore((state) => state.signUp);
+  const getHomeRoute = useAuthStore((state) => state.getHomeRoute);
   const insets = useSafeAreaInsets();
   const currentValuesRef = useRef(formData);
 
   useEffect(() => {
     currentValuesRef.current = formData;
   }, [formData]);
+
+  useEffect(() => {
+    void getPortalChoice().then((portal: PortalChoice | null) => {
+      if (portal === 'student' || portal === 'parent') {
+        setRole(portal);
+      }
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,6 +115,11 @@ export default function RegisterScreen() {
         const list = await fetchOrganizations();
         if (!cancelled) {
           setOrganizations(list);
+          const preferred =
+            list.find((o) => o.slug === 'default-school') ?? (list.length === 1 ? list[0] : null);
+          if (preferred) {
+            setSelectedOrgSlug(preferred.slug);
+          }
         }
       } catch (e: unknown) {
         if (!cancelled) {
@@ -131,12 +135,6 @@ export default function RegisterScreen() {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    if (role === 'publisher') {
-      setContactEmail((prev) => prev || formData.email.trim());
-    }
-  }, [role, formData.email]);
 
   const tintColor = useThemeColor({}, 'tint');
   const backgroundColor = useThemeColor({}, 'background');
@@ -203,38 +201,30 @@ export default function RegisterScreen() {
     next.email = validateSimpleField('email', formData.email);
     next.password = validateSimpleField('password', formData.password);
 
-    const dobRequired = role !== 'publisher';
-    next.dateOfBirth = validateDateOfBirth(dateOfBirth, dobRequired);
-
-    if (role !== 'publisher') {
-      if (!selectedOrgSlug) {
-        next.organization = 'Select your school or university';
+    next.dateOfBirth = validateDateOfBirth(dateOfBirth, role === 'student');
+    if (role === 'student' && !studentClass.trim()) {
+      next.studentClass = 'Class is required for students';
+    }
+    if (role === 'parent') {
+      if (!linkedStudentUsername.trim()) {
+        next.linkedStudentUsername = "Student username is required for parent/guardian accounts";
+      } else if (!/^[a-zA-Z0-9_]+$/.test(linkedStudentUsername.trim())) {
+        next.linkedStudentUsername = 'Only letters, numbers, and underscores allowed';
       }
     }
 
-    if (role === 'staff') {
-      if (!staffRole.trim()) next.staffRole = 'Job title / role is required';
-      if (!staffDepartment.trim()) next.staffDepartment = 'Department is required';
-    }
-
-    if (role === 'publisher') {
-      if (!companyName.trim()) next.companyName = 'Company name is required';
-      if (!contactEmail.trim()) next.contactEmail = 'Publisher contact email is required';
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
-        next.contactEmail = 'Please enter a valid contact email';
-      }
+    if (!selectedOrgSlug) {
+      next.organization = 'Select your school or university';
     }
 
     return next;
   }, [
     formData,
-    role,
     dateOfBirth,
+    role,
+    studentClass,
+    linkedStudentUsername,
     selectedOrgSlug,
-    staffRole,
-    staffDepartment,
-    companyName,
-    contactEmail,
   ]);
 
   const handleSubmit = async () => {
@@ -254,14 +244,13 @@ export default function RegisterScreen() {
         email: formData.email.trim(),
         password: formData.password,
         role,
-        date_of_birth: dateOfBirth.trim() || null,
-        organization_slug: role === 'publisher' ? undefined : selectedOrgSlug ?? undefined,
-        staff_role: role === 'staff' ? staffRole.trim() : undefined,
-        staff_department: role === 'staff' ? staffDepartment.trim() : undefined,
-        company_name: role === 'publisher' ? companyName.trim() : undefined,
-        contact_email: role === 'publisher' ? contactEmail.trim() : undefined,
+        date_of_birth: role === 'student' ? dateOfBirth.trim() || null : null,
+        student_class: role === 'student' ? studentClass.trim() : undefined,
+        linked_student_username:
+          role === 'parent' ? linkedStudentUsername.trim() : undefined,
+        organization_slug: selectedOrgSlug ?? undefined,
       });
-      router.replace('/(tabs)');
+      router.replace(getHomeRoute());
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Registration failed';
       setRegisterError(message);
@@ -275,11 +264,9 @@ export default function RegisterScreen() {
     setFormData({ name: '', username: '', email: '', password: '' });
     setRole('student');
     setDateOfBirth('');
+    setStudentClass('');
+    setLinkedStudentUsername('');
     setSelectedOrgSlug(null);
-    setStaffRole('');
-    setStaffDepartment('');
-    setCompanyName('');
-    setContactEmail('');
     setErrors(emptyErrors());
     setRegisterError(null);
     router.push('/login');
@@ -298,18 +285,30 @@ export default function RegisterScreen() {
   ) => (
     <ThemedView style={styles.inputContainer} key={fieldName}>
       <ThemedText style={styles.label}>{label}</ThemedText>
-      <ThemedTextInput
-        style={[styles.input, errors[fieldName] && styles.inputError]}
-        placeholder={placeholder}
-        value={formData[fieldName]}
-        onChangeText={(text) => handleFieldChange(fieldName, text)}
-        onBlur={() => handleFieldBlur(fieldName)}
-        editable={!isLoading}
-        keyboardType={options?.keyboardType || 'default'}
-        autoCapitalize={options?.autoCapitalize || 'none'}
-        autoCorrect={false}
-        secureTextEntry={options?.secureTextEntry || false}
-      />
+      {options?.secureTextEntry ? (
+        <PasswordInput
+          style={[styles.input, errors[fieldName] && styles.inputError]}
+          placeholder={placeholder}
+          value={formData[fieldName]}
+          onChangeText={(text) => handleFieldChange(fieldName, text)}
+          onBlur={() => handleFieldBlur(fieldName)}
+          editable={!isLoading}
+          autoCapitalize={options?.autoCapitalize || 'none'}
+          autoCorrect={false}
+        />
+      ) : (
+        <ThemedTextInput
+          style={[styles.input, errors[fieldName] && styles.inputError]}
+          placeholder={placeholder}
+          value={formData[fieldName]}
+          onChangeText={(text) => handleFieldChange(fieldName, text)}
+          onBlur={() => handleFieldBlur(fieldName)}
+          editable={!isLoading}
+          keyboardType={options?.keyboardType || 'default'}
+          autoCapitalize={options?.autoCapitalize || 'none'}
+          autoCorrect={false}
+        />
+      )}
       {errors[fieldName] && <ThemedText style={styles.errorText}>{errors[fieldName]}</ThemedText>}
       {helperText && !errors[fieldName] && (
         <ThemedText style={styles.helperText}>{helperText}</ThemedText>
@@ -341,7 +340,9 @@ export default function RegisterScreen() {
           {orgsLoading
             ? 'Loading schools…'
             : organizations.length === 0
-              ? 'No schools available'
+              ? orgsError
+                ? 'Could not load schools'
+                : 'No schools available — run backend migrations'
               : selectedOrgName ?? 'Tap to select your school'}
         </ThemedText>
         {orgsLoading ? <ActivityIndicator color={tintColor} /> : null}
@@ -412,11 +413,9 @@ export default function RegisterScreen() {
                         setErrors((prev) => ({
                           ...prev,
                           organization: null,
-                          staffRole: null,
-                          staffDepartment: null,
-                          companyName: null,
-                          contactEmail: null,
                           dateOfBirth: null,
+                          studentClass: null,
+                          linkedStudentUsername: null,
                         }));
                       }}
                       disabled={isLoading}
@@ -431,117 +430,89 @@ export default function RegisterScreen() {
               </ScrollView>
             </ThemedView>
 
-            {role !== 'publisher' ? renderOrgPicker() : null}
+            {renderOrgPicker()}
 
-            <ThemedView style={styles.inputContainer}>
-              <ThemedText style={styles.label}>
-                Date of birth {role === 'publisher' ? '(optional)' : ''}
-              </ThemedText>
-              <ThemedTextInput
-                style={[styles.input, errors.dateOfBirth && styles.inputError]}
-                placeholder="YYYY-MM-DD"
-                value={dateOfBirth}
-                onChangeText={(t) => {
-                  setDateOfBirth(t);
-                  setErrors((e) => (e.dateOfBirth ? { ...e, dateOfBirth: null } : e));
-                  setRegisterError(null);
-                }}
-                editable={!isLoading}
-                keyboardType="numbers-and-punctuation"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {errors.dateOfBirth ? (
-                <ThemedText style={styles.errorText}>{errors.dateOfBirth}</ThemedText>
-              ) : (
-                <ThemedText style={styles.helperText}>Example: 2008-03-21</ThemedText>
-              )}
-            </ThemedView>
-
-            {role === 'staff' ? (
-              <>
-                <ThemedView style={styles.inputContainer}>
-                  <ThemedText style={styles.label}>Staff role / title</ThemedText>
-                  <ThemedTextInput
-                    style={[styles.input, errors.staffRole && styles.inputError]}
-                    placeholder="e.g. Librarian"
-                    value={staffRole}
-                    onChangeText={(t) => {
-                      setStaffRole(t);
-                      setErrors((e) => (e.staffRole ? { ...e, staffRole: null } : e));
-                    }}
-                    editable={!isLoading}
-                    autoCapitalize="words"
-                  />
-                  {errors.staffRole ? (
-                    <ThemedText style={styles.errorText}>{errors.staffRole}</ThemedText>
-                  ) : null}
-                </ThemedView>
-                <ThemedView style={styles.inputContainer}>
-                  <ThemedText style={styles.label}>Department</ThemedText>
-                  <ThemedTextInput
-                    style={[styles.input, errors.staffDepartment && styles.inputError]}
-                    placeholder="e.g. Learning resources"
-                    value={staffDepartment}
-                    onChangeText={(t) => {
-                      setStaffDepartment(t);
-                      setErrors((e) => (e.staffDepartment ? { ...e, staffDepartment: null } : e));
-                    }}
-                    editable={!isLoading}
-                    autoCapitalize="words"
-                  />
-                  {errors.staffDepartment ? (
-                    <ThemedText style={styles.errorText}>{errors.staffDepartment}</ThemedText>
-                  ) : null}
-                </ThemedView>
-              </>
+            {role === 'student' ? (
+              <ThemedView style={styles.inputContainer}>
+                <ThemedText style={styles.label}>
+                  Date of birth
+                </ThemedText>
+                <ThemedTextInput
+                  style={[styles.input, errors.dateOfBirth && styles.inputError]}
+                  placeholder="YYYY-MM-DD"
+                  value={dateOfBirth}
+                  onChangeText={(t) => {
+                    setDateOfBirth(t);
+                    setErrors((e) => (e.dateOfBirth ? { ...e, dateOfBirth: null } : e));
+                    setRegisterError(null);
+                  }}
+                  editable={!isLoading}
+                  keyboardType="numbers-and-punctuation"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {errors.dateOfBirth ? (
+                  <ThemedText style={styles.errorText}>{errors.dateOfBirth}</ThemedText>
+                ) : (
+                  <ThemedText style={styles.helperText}>Example: 2008-03-21</ThemedText>
+                )}
+              </ThemedView>
             ) : null}
 
-            {role === 'publisher' ? (
-              <>
-                <ThemedView style={styles.inputContainer}>
-                  <ThemedText style={styles.label}>Company name</ThemedText>
-                  <ThemedTextInput
-                    style={[styles.input, errors.companyName && styles.inputError]}
-                    placeholder="Publishing company"
-                    value={companyName}
-                    onChangeText={(t) => {
-                      setCompanyName(t);
-                      setErrors((e) => (e.companyName ? { ...e, companyName: null } : e));
-                    }}
-                    editable={!isLoading}
-                    autoCapitalize="words"
-                  />
-                  {errors.companyName ? (
-                    <ThemedText style={styles.errorText}>{errors.companyName}</ThemedText>
-                  ) : null}
-                </ThemedView>
-                <ThemedView style={styles.inputContainer}>
-                  <ThemedText style={styles.label}>Publisher contact email</ThemedText>
-                  <ThemedTextInput
-                    style={[styles.input, errors.contactEmail && styles.inputError]}
-                    placeholder="public-facing contact"
-                    value={contactEmail}
-                    onChangeText={(t) => {
-                      setContactEmail(t);
-                      setErrors((e) => (e.contactEmail ? { ...e, contactEmail: null } : e));
-                    }}
-                    editable={!isLoading}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                  {errors.contactEmail ? (
-                    <ThemedText style={styles.errorText}>{errors.contactEmail}</ThemedText>
-                  ) : null}
-                </ThemedView>
-              </>
+            {role === 'student' ? (
+              <ThemedView style={styles.inputContainer}>
+                <ThemedText style={styles.label}>Class</ThemedText>
+                <ThemedTextInput
+                  style={[styles.input, errors.studentClass && styles.inputError]}
+                  placeholder="Enter your class (e.g. Grade 8A)"
+                  value={studentClass}
+                  onChangeText={(t) => {
+                    setStudentClass(t);
+                    setErrors((e) => (e.studentClass ? { ...e, studentClass: null } : e));
+                    setRegisterError(null);
+                  }}
+                  editable={!isLoading}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
+                {errors.studentClass ? (
+                  <ThemedText style={styles.errorText}>{errors.studentClass}</ThemedText>
+                ) : null}
+              </ThemedView>
+            ) : null}
+
+            {role === 'parent' ? (
+              <ThemedView style={styles.inputContainer}>
+                <ThemedText style={styles.label}>Student username</ThemedText>
+                <ThemedTextInput
+                  style={[styles.input, errors.linkedStudentUsername && styles.inputError]}
+                  placeholder="Enter your child's username"
+                  value={linkedStudentUsername}
+                  onChangeText={(t) => {
+                    setLinkedStudentUsername(t);
+                    setErrors((e) =>
+                      e.linkedStudentUsername ? { ...e, linkedStudentUsername: null } : e
+                    );
+                    setRegisterError(null);
+                  }}
+                  editable={!isLoading}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {errors.linkedStudentUsername ? (
+                  <ThemedText style={styles.errorText}>{errors.linkedStudentUsername}</ThemedText>
+                ) : (
+                  <ThemedText style={styles.helperText}>
+                    Required: enter your child's student username
+                  </ThemedText>
+                )}
+              </ThemedView>
             ) : null}
 
             {renderField('name', 'Full name', 'Enter your full name', undefined, {
               autoCapitalize: 'words',
             })}
-            {renderField('username', 'Username', 'Choose a username', undefined, {
+            {renderField('username', 'Username', 'Your first name + School initials', undefined, {
               autoCapitalize: 'none',
             })}
             {renderField('email', 'Email', 'Your email address', undefined, {
@@ -552,7 +523,7 @@ export default function RegisterScreen() {
               'Password',
               'Enter your password',
               '8+ characters with upper, lower, number, and special character',
-              { secureTextEntry: true }
+              { secureTextEntry: true, autoCapitalize: 'none' }
             )}
 
             <TouchableOpacity

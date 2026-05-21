@@ -10,14 +10,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import * as DocumentPicker from 'expo-document-picker';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ThemedTextInput } from '@/components/themed-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { addBook, Book, getBooks, setBooks, useBooksStore } from '@/src/store/books';
+import { Book, getBooks, setBooks } from '@/src/store/books';
 import { EXAM_SUBJECTS } from '@/constants/examSubjects';
 
 export default function BookshelfScreen() {
@@ -62,33 +61,20 @@ export default function BookshelfScreen() {
   const mutedTextColor = colorScheme === 'dark' ? '#9BA1A6' : '#687076';
   const tintColor = colorScheme === 'dark' ? '#fff' : '#00FF41'; // UFO Green
   const tagBgColor = colorScheme === 'dark' ? '#2A2A2A' : '#E5E5E5';
-
-  const loadBooksFromApi = useBooksStore((state) => state.loadBooks);
+  const normalizedBoardTags = useMemo(() => {
+    if (!boardParam) return [];
+    const normalized = boardParam.toUpperCase();
+    if (normalized === 'WAEC/JAMB') {
+      return ['WAEC', 'JAMB'];
+    }
+    return [normalized];
+  }, [boardParam]);
 
   useEffect(() => {
-    const load = async () => {
-      const existingBooks = getBooks();
-      const uploadedBooks = existingBooks.filter(
-        (book) => book.pdfUri || book.examTags.length === 0 || book.subject === 'Uploaded'
-      );
-
-      try {
-        await loadBooksFromApi();
-        const apiBooks = getBooks();
-        const merged = [
-          ...uploadedBooks,
-          ...apiBooks.filter((book) => !uploadedBooks.some((existing) => existing.id === book.id)),
-        ];
-        setBooks(merged);
-        setBooksState(merged);
-      } catch (error) {
-        console.error('[Bookshelf] Failed to load books from API:', error);
-        setBooksState(existingBooks);
-      }
-    };
-
-    load();
-  }, [loadBooksFromApi]);
+    const existingBooks = getBooks();
+    setBooksState(existingBooks);
+    setBooks(existingBooks);
+  }, []);
 
   useEffect(() => {
     if (sectionParam === 'Collection') {
@@ -102,7 +88,9 @@ export default function BookshelfScreen() {
     const query = searchQuery.trim().toLowerCase();
     return books.filter((book) => {
       const matchesBoard = boardParam
-        ? book.examTags.map((tag) => tag.toString().toUpperCase()).includes(boardParam.toUpperCase())
+        ? book.examTags
+            .map((tag) => tag.toString().toUpperCase())
+            .some((tag) => normalizedBoardTags.includes(tag))
         : true;
       const matchesSubject = subjectParam ? book.subject === subjectParam : true;
       const matchesQuery = query
@@ -111,7 +99,7 @@ export default function BookshelfScreen() {
         : true;
       return matchesBoard && matchesSubject && matchesQuery && !book.pdfUri && book.subject !== 'Uploaded';
     });
-  }, [books, searchQuery, boardParam, subjectParam]);
+  }, [books, searchQuery, boardParam, subjectParam, normalizedBoardTags]);
 
   const collectionBooks = useMemo(() => {
     return books.filter((book) => {
@@ -140,7 +128,9 @@ export default function BookshelfScreen() {
         !b.pdfUri &&
         b.subject !== 'Uploaded' &&
         b.subject === subjectKey &&
-        b.examTags.map((t) => t.toString().toUpperCase()).includes((boardParam ?? '').toUpperCase())
+        b.examTags
+          .map((t) => t.toString().toUpperCase())
+          .some((tag) => normalizedBoardTags.includes(tag))
     ).length;
 
   const toggleSelectBook = (bookId: string) => {
@@ -208,39 +198,6 @@ export default function BookshelfScreen() {
       )
     );
     resetSelection();
-  };
-
-  const handleUploadPdf = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/pdf',
-        copyToCacheDirectory: true,
-        multiple: false,
-      });
-
-      if (result.canceled) {
-        return;
-      }
-
-      const asset = result.assets?.[0];
-      if (!asset) {
-        return;
-      }
-
-      const title = asset.name.replace(/\.pdf$/i, '');
-      const newBook: Book = {
-        id: `upload-${Date.now()}`,
-        title,
-        subject: 'Uploaded',
-        examTags: [],
-        pdfUri: asset.uri,
-      };
-
-      addBook(newBook);
-      setBooksState(getBooks());
-    } catch (error) {
-      Alert.alert('Upload failed', 'Unable to upload the PDF. Please try again.');
-    }
   };
 
   const renderBook = ({ item }: { item: Book }) => (
@@ -327,13 +284,6 @@ export default function BookshelfScreen() {
             </ThemedText>
           )}
           <View style={styles.headerActions}>
-            <TouchableOpacity
-              style={[styles.uploadButton, { backgroundColor: tintColor }]}
-              onPress={handleUploadPdf}
-              activeOpacity={0.8}>
-              <MaterialIcons name="upload-file" size={20} color="#000" />
-              <ThemedText style={styles.uploadButtonText}>Upload PDF</ThemedText>
-            </TouchableOpacity>
             {activeSection === 'Textbooks' && !showSubjectList && (
               <TouchableOpacity
                 style={[
@@ -668,19 +618,6 @@ const styles = StyleSheet.create({
   },
   backToSubjectsText: {
     fontSize: 16,
-    fontWeight: '600',
-  },
-  uploadButton: {
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  uploadButtonText: {
-    color: '#000',
     fontWeight: '600',
   },
   selectButton: {

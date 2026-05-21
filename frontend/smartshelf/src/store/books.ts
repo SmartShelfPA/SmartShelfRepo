@@ -6,7 +6,6 @@ import { universalStorage } from '@/src/lib/universalStorage';
 import {
   Book as ApiBook,
   BookshelfItem,
-  fetchBooks,
   fetchBookshelf,
 } from '@/services/api';
 
@@ -51,8 +50,20 @@ export const useBooksStore = create<BooksState>()(
       loadBooks: async (params) => {
         set({ isLoading: true });
         try {
-          const data = await fetchBooks(params);
-          set({ books: data.map(mapApiBookToLegacy) });
+          const query = params?.search?.trim().toLowerCase();
+          const category = params?.category?.trim();
+          set((state) => {
+            const filtered = state.books.filter((book) => {
+              const categoryMatch = category ? book.subject === category : true;
+              const queryMatch = query
+                ? book.title.toLowerCase().includes(query) ||
+                  book.subject.toLowerCase().includes(query) ||
+                  book.examTags.some((tag) => tag.toLowerCase().includes(query))
+                : true;
+              return categoryMatch && queryMatch;
+            });
+            return { books: filtered };
+          });
         } finally {
           set({ isLoading: false });
         }

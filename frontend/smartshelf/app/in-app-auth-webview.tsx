@@ -364,7 +364,7 @@ export default function InAppAuthWebViewScreen() {
               top: data.annotation.top,
               width: data.annotation.width,
               height: data.annotation.height,
-            });
+            } as Omit<import('@/services/pdf-annotations').PdfAnnotation, 'id'>);
             const all = await getAnnotations(originalPdfUrl);
             webViewRef.current?.injectJavaScript(
               `window.drawAnnotations && window.drawAnnotations(${JSON.stringify(all)});`

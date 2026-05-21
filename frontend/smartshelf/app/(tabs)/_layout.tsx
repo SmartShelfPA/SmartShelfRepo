@@ -6,8 +6,10 @@ import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useRequireAuth } from '@/src/hooks/useRequireAuth';
 
 export default function TabLayout() {
+  useRequireAuth();
   const colorScheme = useColorScheme();
 
   return (

@@ -30,31 +30,48 @@ def queryset_published_sets(*, latest_only: bool = True) -> QuerySet[IGCSEGenera
     return qs.order_by("-generated_at")
 
 
-def get_published_sets(
+def _apply_set_filters(
+    qs: QuerySet[IGCSEGeneratedSet],
     *,
-    subject_slug: str | None = None,
-    chapter_slug: str | None = None,
-    latest_only: bool = True,
+    subject_slug: str | None,
+    chapter_slug: str | None,
 ) -> QuerySet[IGCSEGeneratedSet]:
-    qs = queryset_published_sets(latest_only=latest_only)
     if subject_slug:
         qs = qs.filter(chapter__subject__slug=subject_slug.strip().lower())
     if chapter_slug:
         qs = qs.filter(chapter__slug=chapter_slug.strip().lower())
     if subject_slug or chapter_slug:
         qs = qs.filter(chapter__subject__is_published=True, chapter__is_published=True)
+    return qs
+
+
+def get_published_sets(
+    *,
+    subject_slug: str | None = None,
+    chapter_slug: str | None = None,
+    latest_only: bool = True,
+) -> QuerySet[IGCSEGeneratedSet]:
+    qs = _apply_set_filters(
+        queryset_published_sets(latest_only=latest_only),
+        subject_slug=subject_slug,
+        chapter_slug=chapter_slug,
+    )
 
     if latest_only and not qs.exists():
-        qs = queryset_published_sets(latest_only=False)
-        if subject_slug:
-            qs = qs.filter(chapter__subject__slug=subject_slug.strip().lower())
-        if chapter_slug:
-            qs = qs.filter(chapter__slug=chapter_slug.strip().lower())
+        qs = _apply_set_filters(
+            queryset_published_sets(latest_only=False),
+            subject_slug=subject_slug,
+            chapter_slug=chapter_slug,
+        )
+        # Chapter-scoped list: pick the newest published set for that chapter.
         if chapter_slug:
             newest = qs.order_by("-generated_at").first()
             if newest is not None:
                 return IGCSEGeneratedSet.objects.filter(pk=newest.pk)
-        return qs.none()
+            return qs.none()
+        # Subject-only or unfiltered: return all matching non-latest published sets.
+        return qs
+
     return qs
 
 

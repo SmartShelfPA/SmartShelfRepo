@@ -13,12 +13,13 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-
-type AccountType = 'student' | 'parent';
+import { useAuthStore } from '@/src/store/auth';
+import type { PortalChoice } from '@/src/lib/portalChoice';
 
 export default function AccountSelectScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const choosePortal = useAuthStore((s) => s.choosePortal);
   const { width } = useWindowDimensions();
   const colorScheme = useColorScheme();
   const backgroundColor = useThemeColor({}, 'background');
@@ -30,13 +31,10 @@ export default function AccountSelectScreen() {
 
   const cardSize = Math.min(width * 0.4, 160);
 
-  const handleSelect = (type: AccountType) => {
+  const handleSelect = async (type: PortalChoice) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (type === 'student') {
-      router.replace('/(tabs)');
-    } else {
-      router.replace('/parent');
-    }
+    await choosePortal(type);
+    router.replace('/login');
   };
 
   return (
@@ -59,7 +57,7 @@ export default function AccountSelectScreen() {
             Who's using SmartShelf?
           </ThemedText>
           <ThemedText style={[styles.subtitle, { color: mutedTextColor }]}>
-            Choose an account to continue
+            Choose how you'll use the app, then sign in or create an account
           </ThemedText>
         </View>
 
@@ -74,14 +72,12 @@ export default function AccountSelectScreen() {
                 borderColor,
               },
             ]}
-            onPress={() => handleSelect('student')}
+            onPress={() => void handleSelect('student')}
             activeOpacity={0.8}>
             <View style={[styles.iconCircle, { backgroundColor: `${tintColor}20` }]}>
               <MaterialIcons name="school" size={48} color={tintColor} />
             </View>
-            <ThemedText style={[styles.accountLabel, { color: textColor }]}>
-              Student
-            </ThemedText>
+            <ThemedText style={[styles.accountLabel, { color: textColor }]}>Student</ThemedText>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -94,14 +90,12 @@ export default function AccountSelectScreen() {
                 borderColor,
               },
             ]}
-            onPress={() => handleSelect('parent')}
+            onPress={() => void handleSelect('parent')}
             activeOpacity={0.8}>
             <View style={[styles.iconCircle, { backgroundColor: `${tintColor}20` }]}>
               <MaterialIcons name="people" size={48} color={tintColor} />
             </View>
-            <ThemedText style={[styles.accountLabel, { color: textColor }]}>
-              Parent
-            </ThemedText>
+            <ThemedText style={[styles.accountLabel, { color: textColor }]}>Parent</ThemedText>
           </TouchableOpacity>
         </View>
       </View>
@@ -110,9 +104,7 @@ export default function AccountSelectScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   content: {
     flex: 1,
     alignItems: 'center',
@@ -136,6 +128,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     textAlign: 'center',
+    lineHeight: 22,
   },
   cardsRow: {
     flexDirection: 'row',

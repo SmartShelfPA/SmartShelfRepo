@@ -74,6 +74,17 @@ class IgcseCatalogApiTests(TestCase):
         self.assertEqual(len(chapters), 1)
         self.assertEqual(chapters[0]["id"], "algebra")
 
+    def test_sets_list_subject_only_fallback_without_latest_flag(self):
+        """When no set is marked latest, subject filter still returns published sets."""
+        self.generated_set.is_latest_published = False
+        self.generated_set.save(update_fields=["is_latest_published"])
+
+        resp = self.client.get(reverse("igcse-sets-list"), {"subject": "mathematics"})
+        self.assertEqual(resp.status_code, 200)
+        sets = resp.json()["data"]["sets"]
+        self.assertEqual(len(sets), 1)
+        self.assertEqual(sets[0]["chapter_slug"], "algebra")
+
     def test_sets_list_and_detail(self):
         list_resp = self.client.get(
             reverse("igcse-sets-list"),

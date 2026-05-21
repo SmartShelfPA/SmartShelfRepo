@@ -5,3 +5,4 @@ export { IgcseListSkeleton } from './IgcseListSkeleton';
 export { IgcseShelfTile } from './IgcseShelfTile';
 export { IgcseStudyResourceCard } from './IgcseStudyResourceCard';
 export { IgcseSubjectCard } from './IgcseSubjectCard';
+export { IgcseTextbookCard } from './IgcseTextbookCard';

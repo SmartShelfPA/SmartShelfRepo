@@ -1,3 +1,13 @@
+# Load NGROK_AUTHTOKEN from .env (copy .env.example to .env).
+# Start tunnel: docker compose --profile tunnel up -d
+# Public URL: open http://localhost:4040 (ngrok inspector) or check container logs.
+#
+# If you see "500" / "requested API version" on Windows: restart Docker Desktop,
+# run `docker pull postgres:16-alpine`, and use the real project folder (not a symlink),
+# e.g. `SmartShelfRepo` — avoid duplicate casing paths like `smartshelfrepo` → symlink.
+
+name: smartshelf
+
 services:
   db:
     image: postgres:16-alpine
@@ -46,10 +56,34 @@ services:
       POSTGRES_PORT: 5432
       QUOTES_API_URL: http://quotes:8080/
       DEBUG: "True"
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-true}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@smartshelf.app}
+      # Dev only: API accepts requests without Bearer for N minutes after container start (0 = off).
+      AUTH_FREE_FOR_MINUTES: ${AUTH_FREE_FOR_MINUTES:-0}
+      AUTH_BYPASS_USER_ID: ${AUTH_BYPASS_USER_ID:-}
     ports:
       - "8000:8000"
     volumes:
       - ./backend/smartshelfbackend:/app/smartshelfbackend
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: smartshelf-ngrok
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    command:
+      - "http"
+      - "backend:8000"
+    ports:
+      - "4040:4040"
 
 volumes:
   smartshelf_postgres_data:
