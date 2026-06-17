@@ -9,5 +9,6 @@ done
 echo "PostgreSQL is ready. Running migrations..."
 python manage.py migrate --noinput
 
-echo "Starting Django server..."
-exec python manage.py runserver 0.0.0.0:8000
+PORT="${PORT:-8000}"
+echo "Starting Django server on 0.0.0.0:${PORT}..."
+exec python manage.py runserver "0.0.0.0:${PORT}"
