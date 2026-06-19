@@ -50,6 +50,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'smartshelfbackend.dev_cors_middleware.DevCorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -132,6 +133,33 @@ STATIC_URL = 'static/'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# ── Protected PDF assets ──────────────────────────────────────────────────
+# Raw protected PDFs are stored OUTSIDE MEDIA_ROOT so the dev static-media
+# handler (and any public web server config) never serves them directly.
+# Access is only ever granted through signed, short-lived download tokens.
+PROTECTED_MEDIA_ROOT = os.getenv(
+    'PROTECTED_MEDIA_ROOT', str(BASE_DIR / 'protected_media')
+)
+# Lifetime (seconds) of a signed download token returned by authorize-download.
+PROTECTED_DOWNLOAD_TOKEN_MAX_AGE = int(
+    os.getenv('PROTECTED_DOWNLOAD_TOKEN_MAX_AGE', '300')
+)
+# How long an already-downloaded copy may be opened offline before the app
+# must re-authorize with the backend (enables rights revocation over time).
+PROTECTED_OFFLINE_ACCESS_DAYS = int(
+    os.getenv('PROTECTED_OFFLINE_ACCESS_DAYS', '30')
+)
+
+# Repo-bundled IGCSE EPUBs (see SmartShelfRepo/bundled-igcse/)
+BUNDLED_IGCSE_EPUB_DIR = os.getenv(
+    'BUNDLED_IGCSE_EPUB_DIR',
+    str(BASE_DIR.parent.parent / 'bundled-igcse' / 'epubs'),
+)
+BUNDLED_IGCSE_MANIFEST = os.getenv(
+    'BUNDLED_IGCSE_MANIFEST',
+    str(BASE_DIR.parent.parent / 'bundled-igcse' / 'manifest.json'),
+)
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
@@ -151,6 +179,15 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '200/day',
+        'login': os.getenv('AUTH_RATE_LIMIT_LOGIN', '10/min'),
+        'register': os.getenv('AUTH_RATE_LIMIT_REGISTER', '5/min'),
+        'password_reset': os.getenv('AUTH_RATE_LIMIT_PASSWORD_RESET', '5/min'),
+    },
 }
 
 from users.auth_bypass import configure_deadline_minutes  # noqa: E402
@@ -175,10 +212,26 @@ LEARNING_QUESTION_PROVIDER = os.getenv('LEARNING_QUESTION_PROVIDER', 'aloc')
 
 QUESTION_CACHE_TTL_SECONDS = int(os.getenv('QUESTION_CACHE_TTL_SECONDS', '3600'))
 
+# OpenAI — server-side proxy for practice answer explanations (mobile calls /api/v1/practice/explain/)
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+OPENAI_EXPLAIN_MODEL = os.getenv('OPENAI_EXPLAIN_MODEL', 'gpt-4o-mini')
+OPENAI_REQUEST_TIMEOUT = float(os.getenv('OPENAI_REQUEST_TIMEOUT', '30'))
+
 # Optional JSON overrides for subject/year lists: '["chemistry","english"]'
 PRACTICE_SUBJECTS_WAEC_JSON = os.getenv('PRACTICE_SUBJECTS_WAEC_JSON', '')
 PRACTICE_SUBJECTS_JAMB_JSON = os.getenv('PRACTICE_SUBJECTS_JAMB_JSON', '')
 PRACTICE_YEARS_JSON = os.getenv('PRACTICE_YEARS_JSON', '')
+
+# ── Compliance / cross-border data disclosure ─────────────────────────────
+# These values are returned by /api/v1/auth/policy-info/ and embedded in
+# privacy disclosures served to users.
+DATA_STORAGE_COUNTRY = os.getenv('DATA_STORAGE_COUNTRY', 'Nigeria')
+DATA_STORAGE_REGION = os.getenv('DATA_STORAGE_REGION', 'West Africa')
+PRIVACY_CONTACT_EMAIL = os.getenv('PRIVACY_CONTACT_EMAIL', 'privacy@smartshelf.ng')
+# Jurisdiction flags — set to 'true' to enable jurisdiction-specific disclosures.
+COMPLIANCE_NDPA = os.getenv('COMPLIANCE_NDPA', 'true').lower() == 'true'   # Nigeria NDPA
+COMPLIANCE_COPPA = os.getenv('COMPLIANCE_COPPA', 'true').lower() == 'true'  # US COPPA
+COMPLIANCE_PIPEDA = os.getenv('COMPLIANCE_PIPEDA', 'true').lower() == 'true'  # Canada PIPEDA
 
 # Email settings (used by password reset flow).
 # Default writes emails to console in local/dev unless overridden by env.

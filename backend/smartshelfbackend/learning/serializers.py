@@ -9,7 +9,33 @@ from learning.models import (
     IgcsUserReading,
     PracticeResponse,
     PracticeSession,
+    ProtectedPdfAsset,
 )
+
+
+class ProtectedPdfAssetSerializer(serializers.ModelSerializer):
+    """Metadata only — never exposes the raw file path or a public URL."""
+
+    file_size_bytes = serializers.IntegerField(read_only=True)
+    is_downloadable = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = ProtectedPdfAsset
+        fields = (
+            "id",
+            "title",
+            "subject",
+            "chapter",
+            "description",
+            "cover_image_url",
+            "file_size_bytes",
+            "access_level",
+            "rights_status",
+            "rights_version",
+            "is_downloadable",
+            "created_at",
+            "updated_at",
+        )
 
 
 class IgcsEpubBookSerializer(serializers.ModelSerializer):
