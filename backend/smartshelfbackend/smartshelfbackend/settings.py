@@ -29,17 +29,20 @@ DEBUG = True
 ALLOWED_HOSTS = ['*']  # In production, specify actual hosts
 
 # Required for Django admin login over HTTPS (Render, etc.).
-CSRF_TRUSTED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv(
-        "CSRF_TRUSTED_ORIGINS",
-        "https://smartshelf-api.onrender.com",
-    ).split(",")
-    if origin.strip()
-]
+# Note: os.getenv("KEY", default) still returns "" if the env var is set but empty on Render.
+_render_origin = "https://smartshelf-api.onrender.com"
+_csrf_origins_raw = os.getenv("CSRF_TRUSTED_ORIGINS") or _render_origin
+CSRF_TRUSTED_ORIGINS = sorted(
+    {
+        _render_origin,
+        *[origin.strip() for origin in _csrf_origins_raw.split(",") if origin.strip()],
+    }
+)
 
 # Render terminates TLS at the load balancer.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = True
 
 
 # Application definition
