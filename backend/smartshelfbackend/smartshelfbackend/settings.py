@@ -28,6 +28,19 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']  # In production, specify actual hosts
 
+# Required for Django admin login over HTTPS (Render, etc.).
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CSRF_TRUSTED_ORIGINS",
+        "https://smartshelf-api.onrender.com",
+    ).split(",")
+    if origin.strip()
+]
+
+# Render terminates TLS at the load balancer.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
 
 # Application definition
 
