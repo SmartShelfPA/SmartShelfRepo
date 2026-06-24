@@ -6,6 +6,7 @@ from django.utils import timezone
 from learning.models import QuestionCacheBatch
 from learning.services.normalize import normalize_question
 from learning.services.providers.aloc import AlocQuestionProvider
+from learning.services.providers.aloc_errors import AlocProviderError
 
 
 def get_provider_for_exam(exam_type: str) -> AlocQuestionProvider:
@@ -35,6 +36,11 @@ def fetch_normalized_questions(*, exam_type: str, subject: str, year: int) -> li
                 raw=raw if isinstance(raw, dict) else {},
                 provider=provider.name,
             )
+        )
+
+    if not normalized:
+        raise AlocProviderError(
+            f"No questions could be normalized for {exam_type} / {subject} / {year}."
         )
 
     QuestionCacheBatch.objects.update_or_create(

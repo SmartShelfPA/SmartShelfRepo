@@ -24,4 +24,5 @@ urlpatterns = [
         views.PracticeQuestionsView.as_view(),
         name="practice-questions",
     ),
+    path("explain/", views.PracticeExplainView.as_view(), name="practice-explain"),
 ]

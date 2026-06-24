@@ -86,7 +86,9 @@ def normalize_question(
         or raw.get("correct")
         or raw.get("scheme")
     )
-    correct_option_id = str(correct_raw) if correct_raw is not None else options[0]["id"]
+    correct_option_id = str(correct_raw).strip() if correct_raw is not None else options[0]["id"]
+    if len(correct_option_id) == 1 and correct_option_id.isalpha():
+        correct_option_id = correct_option_id.upper()
     if not any(o["id"] == correct_option_id for o in options):
         correct_option_id = options[0]["id"]
 
