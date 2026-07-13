@@ -114,8 +114,8 @@ export default function ParentView() {
     <ThemedView style={[styles.container, { backgroundColor }]}>
       <ParentHeader
         parentName={dashboard.parentName ?? 'Parent'}
-        onBackPress={() => router.replace('/account-select')}
-        onProfilePress={() => router.replace('/account-select')}
+        onBackPress={() => router.replace('/login')}
+        onProfilePress={() => router.replace('/login')}
       />
 
       <ScrollView
@@ -132,28 +132,35 @@ export default function ParentView() {
           totalItemsTracked={dashboard.totalItemsTracked ?? 0}
         />
 
+        {(dashboard.totalChildren ?? 0) === 0 ? (
+          <ThemedView style={[styles.emptyCard, { backgroundColor: cardBgColor, borderColor: tagBgColor }]}>
+            <ThemedText style={[styles.emptyTitle, { color: textColor }]}>
+              No linked children yet
+            </ThemedText>
+            <ThemedText style={[styles.emptyBody, { color: mutedTextColor }]}>
+              Ask your school to send you a parent invite code, then tap Parent Access on the sign-up
+              screen to link your account to your child.
+            </ThemedText>
+          </ThemedView>
+        ) : null}
+
         {/* Student features: Textbooks */}
         <View style={styles.section}>
           <ThemedText style={[styles.sectionTitle, { color: mutedTextColor }]}>
             TEXTBOOKS
           </ThemedText>
           <View style={styles.examBoardRow}>
-            {[{ label: 'IGCSE shelf', subtitle: 'Coming soon', icon: 'auto-stories' }].map((board) => (
+            {[{ label: 'IGCSE shelf', icon: 'auto-stories' }].map((board) => (
               <TouchableOpacity
                 key={board.label}
                 style={[styles.examBoardIcon, { borderColor: tintColor, backgroundColor: cardBgColor }]}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push('/igcse-coming-soon');
+                  router.push('/igcse');
                 }}
                 activeOpacity={0.8}>
                 <MaterialIcons name={board.icon as any} size={24} color={tintColor} />
                 <ThemedText style={styles.examBoardLabel}>{board.label}</ThemedText>
-                {'subtitle' in board && board.subtitle ? (
-                  <ThemedText style={[styles.examBoardSubtitle, { color: mutedTextColor }]}>
-                    {board.subtitle}
-                  </ThemedText>
-                ) : null}
               </TouchableOpacity>
             ))}
           </View>
@@ -358,4 +365,13 @@ const styles = StyleSheet.create({
   featureCardDesc: {
     fontSize: 13,
   },
+  emptyCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 16,
+    gap: 8,
+    marginBottom: 16,
+  },
+  emptyTitle: { fontSize: 16, fontWeight: '700' },
+  emptyBody: { fontSize: 14, lineHeight: 20 },
 });

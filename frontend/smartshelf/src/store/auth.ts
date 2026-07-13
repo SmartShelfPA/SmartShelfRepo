@@ -46,7 +46,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initialize: async () => {
     set({ isHydrating: true });
-    try {
+
+    const run = async () => {
       const portalChoice = await getPortalChoice();
       await hydrateAuthSession();
       const token = await getToken();
@@ -74,6 +75,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       set({ token, user, isAuthenticated: true, portalChoice });
+    };
+
+    const timeoutMs = 12000;
+    try {
+      await Promise.race([
+        run(),
+        new Promise<void>((resolve) => {
+          setTimeout(resolve, timeoutMs);
+        }),
+      ]);
+    } catch (error) {
+      console.error('[Auth] initialize failed:', error);
+      set({ token: null, user: null, isAuthenticated: false });
     } finally {
       set({ isHydrating: false });
     }

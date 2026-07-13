@@ -1,3 +1,4 @@
+import { apiRequest } from '@/services/api';
 import type { NormalizedQuestion } from '@/src/types/practice';
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
@@ -20,8 +21,15 @@ export function plainTextFromPracticeHtml(html: string): string {
     .trim();
 }
 
+function isMockPracticeExplanation(html: string): boolean {
+  return /mock explanation text for local ui testing/i.test(plainTextFromPracticeHtml(html));
+}
+
 export function hasBundledExplanation(q: NormalizedQuestion): boolean {
-  return plainTextFromPracticeHtml(q.explanationHtml ?? '').length > 0;
+  const html = q.explanationHtml ?? '';
+  if (!plainTextFromPracticeHtml(html)) return false;
+  if (isMockPracticeExplanation(html)) return false;
+  return true;
 }
 
 export type ExplainAnswerInput = {
@@ -31,14 +39,75 @@ export type ExplainAnswerInput = {
   question: NormalizedQuestion;
 };
 
+function questionToBackendPayload(q: NormalizedQuestion): Record<string, unknown> {
+  return {
+    id: q.id,
+    exam_type: q.examType,
+    subject: q.subject,
+    year: q.year,
+    prompt_html: q.promptHtml,
+    options: q.options.map((o) => ({ id: o.id, label_html: o.labelHtml })),
+    correct_option_id: q.correctOptionId,
+    explanation_html: q.explanationHtml ?? '',
+    order_index: q.orderIndex,
+  };
+}
+
+async function fetchAiAnswerExplanationFromBackend(
+  input: ExplainAnswerInput,
+  opts?: { signal?: AbortSignal }
+): Promise<string> {
+  const response = await apiRequest('/v1/practice/explain/', {
+    method: 'POST',
+    signal: opts?.signal,
+    body: JSON.stringify({
+      exam_type: input.examType,
+      subject: input.subject,
+      year: input.year,
+      question: questionToBackendPayload(input.question),
+    }),
+  });
+  const raw = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!response.ok) {
+    const err =
+      raw && typeof raw.error === 'string'
+        ? raw.error
+        : `SmartShelf explain API failed (${response.status})`;
+    throw new Error(err);
+  }
+  const text = typeof raw?.explanation === 'string' ? raw.explanation.trim() : '';
+  if (!text) {
+    throw new Error('No explanation text returned from SmartShelf.');
+  }
+  return text;
+}
+
 /**
- * Short tutor-style explanation (OpenAI). Requires `EXPO_PUBLIC_OPENAI_API_KEY` in `.env`.
- * For production, prefer a backend proxy so the key is not in the client bundle.
+ * Short tutor-style explanation. Uses SmartShelf backend (OpenAI proxy) when signed in;
+ * falls back to EXPO_PUBLIC_OPENAI_API_KEY in local dev only.
  */
 export async function fetchAiAnswerExplanation(
   input: ExplainAnswerInput,
   opts?: { signal?: AbortSignal }
 ): Promise<string> {
+  try {
+    return await fetchAiAnswerExplanationFromBackend(input, opts);
+  } catch (backendErr) {
+    const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY?.trim();
+    if (!apiKey) {
+      throw backendErr instanceof Error
+        ? backendErr
+        : new Error(
+            'AI explanations require OPENAI_API_KEY on the SmartShelf server (or EXPO_PUBLIC_OPENAI_API_KEY in local dev).'
+          );
+    }
+    if (!__DEV__) {
+      throw backendErr instanceof Error
+        ? backendErr
+        : new Error('AI explanations are unavailable. Configure OPENAI_API_KEY on the server.');
+    }
+  }
+
   const apiKey = process.env.EXPO_PUBLIC_OPENAI_API_KEY?.trim();
   if (!apiKey) {
     throw new Error('Add EXPO_PUBLIC_OPENAI_API_KEY to frontend/.env and restart Expo.');

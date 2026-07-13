@@ -19,6 +19,8 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useProfileAvatar } from '@/src/hooks/useProfileAvatar';
 import { useAuthStore } from '@/src/store/auth';
+import { PricingTiersModal } from '@/components/pricing-tiers-modal';
+import type { PricingTier } from '@/src/constants/pricingTiers';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -29,7 +31,9 @@ export default function ProfileScreen() {
   const signOut = useAuthStore((state) => state.signOut);
   const { avatarUri, userInitials, displayName, saveFromPickerUri } = useProfileAvatar();
   const [showAchievements, setShowAchievements] = useState(false);
+  const [showPrices, setShowPrices] = useState(false);
   const colorScheme = useColorScheme();
+  const mutedTextColor = colorScheme === 'dark' ? '#9BA1A6' : '#687076';
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({}, 'background');
   const cardBgColor = colorScheme === 'dark' ? '#1F1F1F' : '#FFFFFF';
@@ -102,11 +106,13 @@ export default function ProfileScreen() {
           {[
             {
               label: 'SWITCH ACCOUNT',
-              action: () => {
+              action: async () => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.replace('/account-select');
+                await signOut();
+                router.replace('/register');
               },
             },
+            { label: 'PRICES', action: () => setShowPrices(true) },
             { label: 'MY BIO', action: () => Alert.alert('My Bio', 'Coming soon.') },
             { label: 'CHANGE PASSWORD', action: () => Alert.alert('Change Password', 'Coming soon.') },
             { label: 'MY ACHIEVEMENTS', action: () => setShowAchievements(true) },
@@ -122,11 +128,45 @@ export default function ProfileScreen() {
           ))}
         </View>
 
+        {/* ── Privacy & Data section ─────────────────────────────────────── */}
+        <ThemedText style={[styles.sectionLabel, { color: mutedTextColor }]}>
+          PRIVACY &amp; LEGAL
+        </ThemedText>
+        <View style={styles.actionList}>
+          {[
+            {
+              label: 'Privacy Policy',
+              action: () => router.push('/privacy-policy'),
+              icon: 'privacy-tip' as const,
+            },
+            {
+              label: 'Terms of Use',
+              action: () => router.push('/terms-of-use'),
+              icon: 'description' as const,
+            },
+            {
+              label: 'Privacy & Data Settings',
+              action: () => router.push('/privacy-data'),
+              icon: 'tune' as const,
+            },
+          ].map((item) => (
+            <TouchableOpacity
+              key={item.label}
+              style={[styles.actionRow, { backgroundColor: cardBgColor, borderColor }]}
+              onPress={item.action}
+              activeOpacity={0.8}>
+              <MaterialIcons name={item.icon} size={18} color={mutedTextColor} style={{ marginRight: 10 }} />
+              <ThemedText style={[styles.actionText, { flex: 1 }]}>{item.label}</ThemedText>
+              <MaterialIcons name="chevron-right" size={20} color={textColor} />
+            </TouchableOpacity>
+          ))}
+        </View>
+
         <TouchableOpacity
           style={[styles.logoutButton, { backgroundColor: cardBgColor, borderColor }]}
           onPress={async () => {
             await signOut();
-            router.replace('/account-select');
+            router.replace('/register');
           }}
           activeOpacity={0.8}>
           <ThemedText style={[styles.logoutText, { color: accentColor }]}>Logout</ThemedText>
@@ -134,6 +174,27 @@ export default function ProfileScreen() {
         </TouchableOpacity>
 
       </ScrollView>
+
+      <PricingTiersModal
+        visible={showPrices}
+        onClose={() => setShowPrices(false)}
+        cardBgColor={cardBgColor}
+        borderColor={borderColor}
+        textColor={textColor}
+        mutedColor={mutedTextColor}
+        accentColor={accentColor}
+        onTierPress={(tier: PricingTier) => {
+          if (tier.id === 'student' || tier.id === 'micro' || tier.id === 'diaspora') {
+            Alert.alert(tier.title, 'Online checkout is coming soon. Check back after the next app update.');
+            return;
+          }
+          Alert.alert(
+            tier.title,
+            'Email hello@smartshelf.ng to discuss institutional, publisher, or analytics partnerships.'
+          );
+        }}
+      />
+
       <Modal
         visible={showAchievements}
         transparent
@@ -232,6 +293,14 @@ const styles = StyleSheet.create({
   },
   nameText: {
     fontSize: 16,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginTop: 28,
+    marginBottom: -8,
+    paddingHorizontal: 4,
   },
   actionList: {
     marginTop: 20,

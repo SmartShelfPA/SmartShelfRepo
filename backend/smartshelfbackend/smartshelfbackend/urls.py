@@ -20,8 +20,11 @@ from django.conf.urls.static import static
 from django.urls import path, include
 
 from learning.views import DashboardView
+from users.legal_views import PrivacyPolicyPageView, TermsOfUsePageView
 
 urlpatterns = [
+    path('privacy/', PrivacyPolicyPageView.as_view(), name='privacy-policy'),
+    path('terms/', TermsOfUsePageView.as_view(), name='terms-of-use'),
     path('admin/', admin.site.urls),
     path('api/auth/', include('auth.urls')),
     path('api/quotes/', include('quotes.urls')),

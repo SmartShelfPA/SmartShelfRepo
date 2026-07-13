@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo } from 'react';
+import { useShallow } from 'zustand/shallow';
 
 import {
   selectBookSlice,
@@ -34,7 +35,9 @@ export function useIgcsReaderSession(bookId: string | undefined) {
   const setFontScaleStore = useIgcsReaderStore((s) => s.setFontScale);
   const setReaderThemeStore = useIgcsReaderStore((s) => s.setReaderTheme);
 
-  const slice = useIgcsReaderStore((s) => (bookId ? selectBookSlice(bookId)(s) : undefined));
+  const slice = useIgcsReaderStore(
+    useShallow((s) => (bookId ? selectBookSlice(bookId)(s) : undefined))
+  );
 
   useEffect(() => {
     if (bookId) ensureBook(bookId);

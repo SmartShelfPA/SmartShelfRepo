@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 
 import { useAuthStore } from '@/src/store/auth';
 
-/** Redirect unauthenticated users to the onboarding entry (account select). */
+/** Redirect unauthenticated users to student sign up. */
 export function useRequireAuth() {
   const router = useRouter();
   const isHydrating = useAuthStore((s) => s.isHydrating);
@@ -11,7 +11,7 @@ export function useRequireAuth() {
 
   useEffect(() => {
     if (!isHydrating && !isAuthenticated) {
-      router.replace('/account-select');
+      router.replace('/register');
     }
   }, [isHydrating, isAuthenticated, router]);
 }

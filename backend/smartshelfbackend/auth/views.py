@@ -3,7 +3,9 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.cache import cache
 from django.core.mail import send_mail
 from django.conf import settings
+from django.utils import timezone
 import logging
+import os
 from rest_framework import serializers, status
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
@@ -12,8 +14,15 @@ from rest_framework.views import APIView
 import secrets
 import string
 
-from users.models import Organization, PublisherProfile, UserProfile
+from users.models import AuditLog, Organization, ParentalConsent, PublisherProfile, UserProfile
 from users.serializers import OrganizationSerializer, UserProfileSerializer
+from .throttles import LoginRateThrottle, PasswordResetRateThrottle, RegisterRateThrottle
+from .google_auth import (
+    GoogleAuthError,
+    exchange_code_for_id_token,
+    get_or_create_google_user,
+    verify_google_id_token,
+)
 
 RESET_CODE_TTL_SECONDS = 15 * 60
 RESET_CODE_MAX_ATTEMPTS = 5
@@ -26,6 +35,11 @@ def _password_reset_cache_key(email: str) -> str:
 
 def _generate_reset_code() -> str:
     return "".join(secrets.choice(string.digits) for _ in range(6))
+
+
+# Version tags embedded in the app / backend — bump these when policy text changes.
+CURRENT_TERMS_VERSION = "2024-06"
+CURRENT_PRIVACY_VERSION = "2024-06"
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -48,6 +62,20 @@ class RegisterSerializer(serializers.Serializer):
     company_name = serializers.CharField(required=False, allow_blank=True, max_length=255)
     contact_email = serializers.EmailField(required=False, allow_blank=True)
 
+    # Consent fields — terms_accepted is required for new accounts.
+    terms_accepted = serializers.BooleanField(
+        required=True,
+        error_messages={"required": "You must accept the Terms of Use to create an account."},
+    )
+    analytics_consent = serializers.BooleanField(required=False, default=False)
+
+    def validate_terms_accepted(self, value):
+        if not value:
+            raise serializers.ValidationError(
+                "You must accept the Terms of Use and Privacy Policy to create an account."
+            )
+        return value
+
     def validate(self, attrs):
         role = attrs["role"]
         if role == UserProfile.Role.STAFF:
@@ -60,16 +88,14 @@ class RegisterSerializer(serializers.Serializer):
         if role == UserProfile.Role.STUDENT and not attrs.get("student_class"):
             raise serializers.ValidationError("student_class is required for students.")
         if role == UserProfile.Role.PARENT:
-            linked_student_username = attrs.get("linked_student_username", "").strip()
-            if not linked_student_username:
-                raise serializers.ValidationError(
-                    "linked_student_username is required for parent users."
-                )
-            child = UserProfile.objects.filter(username=linked_student_username).first()
-            if not child or child.role != UserProfile.Role.STUDENT:
-                raise serializers.ValidationError(
-                    "linked_student_username must belong to an existing student user."
-                )
+            raise serializers.ValidationError(
+                {
+                    "role": (
+                        "Parent accounts require an invitation code. "
+                        "Open the app, tap Parent Access, and enter the code from your school."
+                    )
+                }
+            )
         if role == UserProfile.Role.PUBLISHER:
             if not attrs.get("company_name"):
                 raise serializers.ValidationError("company_name is required for publishers.")
@@ -96,6 +122,7 @@ class OrganizationListPublicView(APIView):
 class RegisterView(APIView):
     authentication_classes = []
     permission_classes = []
+    throttle_classes = [RegisterRateThrottle]
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -116,6 +143,9 @@ class RegisterView(APIView):
         if UserProfile.objects.filter(email=data["email"]).exists():
             return Response({"error": "Email already exists."}, status=400)
 
+        # School-managed flag: inherit from org governance setting.
+        school_managed = bool(organization and organization.governs_student_data)
+
         user = UserProfile.objects.create_user(
             username=data["username"],
             password=data["password"],
@@ -128,7 +158,23 @@ class RegisterView(APIView):
             staff_role=data.get("staff_role", ""),
             staff_department=data.get("staff_department", ""),
             organization=organization,
+            school_managed=school_managed,
         )
+
+        # Stamp policy acceptance at account creation.
+        user.record_policy_acceptance(
+            terms_version=CURRENT_TERMS_VERSION,
+            privacy_version=CURRENT_PRIVACY_VERSION,
+            analytics=data.get("analytics_consent", False),
+            save=True,
+        )
+        AuditLog.log(
+            AuditLog.Action.POLICY_ACCEPT,
+            actor=user,
+            target=user,
+            notes=f"Terms v{CURRENT_TERMS_VERSION} + Privacy v{CURRENT_PRIVACY_VERSION} accepted at registration.",
+        )
+
         token, _ = Token.objects.get_or_create(user=user)
 
         if user.role == UserProfile.Role.PUBLISHER:
@@ -140,10 +186,7 @@ class RegisterView(APIView):
                 },
             )
         elif user.role == UserProfile.Role.PARENT:
-            linked_student_username = data.get("linked_student_username", "").strip()
-            child = UserProfile.objects.filter(username=linked_student_username).first()
-            if child and child.role == UserProfile.Role.STUDENT:
-                user.managed_students.add(child)
+            pass  # Parent-child link is created via invite redemption only.
 
         return Response(
             {
@@ -161,17 +204,79 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField()
 
 
+MAX_FAILED_LOGINS = int(os.environ.get("AUTH_MAX_FAILED_LOGINS", "5"))
+LOCKOUT_MINUTES = int(os.environ.get("AUTH_LOCKOUT_MINUTES", "30"))
+
+
 class LoginView(APIView):
     authentication_classes = []
     permission_classes = []
+    throttle_classes = [LoginRateThrottle]
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+
+        # Pre-check: find the account to test for lockout before authenticating.
+        candidate = UserProfile.objects.filter(username=data["username"]).first()
+        if candidate and candidate.is_locked:
+            AuditLog.log(
+                AuditLog.Action.ADMIN_ACTION,
+                actor=None,
+                target=candidate,
+                notes=f"Login blocked — account locked until {candidate.locked_until.isoformat()}.",
+            )
+            return Response(
+                {
+                    "error": "account_locked",
+                    "message": (
+                        f"Your account is temporarily locked due to too many failed login attempts. "
+                        f"Try again after {candidate.locked_until.strftime('%H:%M UTC')}."
+                    ),
+                    "locked_until": candidate.locked_until.isoformat(),
+                },
+                status=403,
+            )
+
         user = authenticate(username=data["username"], password=data["password"])
+
         if not user:
+            # Record failed attempt if the account exists.
+            if candidate:
+                candidate.record_failed_login(
+                    max_attempts=MAX_FAILED_LOGINS, lockout_minutes=LOCKOUT_MINUTES
+                )
+                AuditLog.log(
+                    AuditLog.Action.ADMIN_ACTION,
+                    actor=None,
+                    target=candidate,
+                    notes=(
+                        f"Failed login attempt #{candidate.failed_login_count}. "
+                        + (
+                            f"Account locked until {candidate.locked_until.isoformat()}."
+                            if candidate.locked_until
+                            else ""
+                        )
+                    ),
+                )
+                if candidate.is_locked:
+                    return Response(
+                        {
+                            "error": "account_locked",
+                            "message": (
+                                f"Too many failed attempts. Your account is locked for "
+                                f"{LOCKOUT_MINUTES} minutes."
+                            ),
+                            "locked_until": candidate.locked_until.isoformat(),
+                        },
+                        status=403,
+                    )
             return Response({"error": "Invalid username or password"}, status=401)
+
+        # Successful authentication — clear any prior lockout.
+        user.clear_failed_logins()
+
         token, _ = Token.objects.get_or_create(user=user)
         return Response(
             {
@@ -207,6 +312,7 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 class PasswordResetRequestView(APIView):
     authentication_classes = []
     permission_classes = []
+    throttle_classes = [PasswordResetRateThrottle]
 
     def post(self, request):
         serializer = PasswordResetRequestSerializer(data=request.data)
@@ -315,3 +421,136 @@ class PasswordResetConfirmView(APIView):
         cache.delete(cache_key)
 
         return Response({"success": True, "message": "Password reset successful."})
+
+
+class PolicyInfoView(APIView):
+    """
+    GET /api/v1/auth/policy-info/
+
+    Returns the current policy versions, privacy contact, data storage location,
+    and active jurisdiction flags.  No authentication required — used by the app
+    at startup and on the registration/consent screens.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        jurisdictions = []
+        if getattr(settings, "COMPLIANCE_NDPA", True):
+            jurisdictions.append({
+                "code": "NDPA",
+                "label": "Nigeria Data Protection Act (NDPA) 2023",
+                "summary": (
+                    "SmartShelf processes your personal data in compliance with the Nigerian "
+                    "Data Protection Act 2023. You have the right to access, correct, and "
+                    "request deletion of your data."
+                ),
+            })
+        if getattr(settings, "COMPLIANCE_COPPA", True):
+            jurisdictions.append({
+                "code": "COPPA",
+                "label": "U.S. Children's Online Privacy Protection Act (COPPA)",
+                "summary": (
+                    "We do not knowingly collect personal information from children under 13 "
+                    "without verified parental consent. If you believe we have inadvertently "
+                    "collected such data, contact us to have it removed."
+                ),
+            })
+        if getattr(settings, "COMPLIANCE_PIPEDA", True):
+            jurisdictions.append({
+                "code": "PIPEDA",
+                "label": "Canada — PIPEDA / Law 25",
+                "summary": (
+                    "If you are in Canada, your personal data is handled in accordance with "
+                    "the Personal Information Protection and Electronic Documents Act (PIPEDA). "
+                    "You may withdraw consent at any time from Privacy & Data Settings."
+                ),
+            })
+
+        return Response({
+            "terms_version": CURRENT_TERMS_VERSION,
+            "privacy_version": CURRENT_PRIVACY_VERSION,
+            "privacy_contact": getattr(settings, "PRIVACY_CONTACT_EMAIL", "privacy@smartshelf.ng"),
+            "data_storage_country": getattr(settings, "DATA_STORAGE_COUNTRY", "Nigeria"),
+            "data_storage_region": getattr(settings, "DATA_STORAGE_REGION", "West Africa"),
+            "jurisdictions": jurisdictions,
+        })
+
+
+class GoogleSignInView(APIView):
+    """
+    POST /api/v1/auth/google/
+
+    Body: { "id_token": "<Google JWT>", "platform": "ios|android|web" }
+
+    Verifies the Google id_token, creates or retrieves the matching SmartShelf
+    account, and returns a DRF token just like the regular login endpoint.
+
+    Requires GOOGLE_CLIENT_ID_IOS / _ANDROID / _WEB env vars — see
+    auth/google_auth.py for full setup instructions.
+    """
+
+    authentication_classes = []
+    permission_classes = []
+    throttle_classes = [LoginRateThrottle]
+
+    def post(self, request):
+        code = request.data.get("code", "").strip()
+        redirect_uri = request.data.get("redirect_uri", "").strip()
+
+        if not code:
+            return Response(
+                {"error": "code is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not redirect_uri:
+            return Response(
+                {"error": "redirect_uri is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            # Exchange the authorization code for an id_token using the client secret.
+            id_token_str = exchange_code_for_id_token(code, redirect_uri)
+            claims = verify_google_id_token(id_token_str)
+            user, created = get_or_create_google_user(claims)
+        except GoogleAuthError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        except Exception as exc:
+            logger.exception("Unexpected error during Google sign-in")
+            return Response(
+                {"error": "Authentication failed. Please try again."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        # Ensure the account is active.
+        if not user.is_active:
+            return Response(
+                {"error": "This account has been deactivated. Contact support."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        user.clear_failed_logins()
+        token, _ = Token.objects.get_or_create(user=user)
+
+        AuditLog.log(
+            AuditLog.Action.POLICY_ACCEPT if created else AuditLog.Action.ADMIN_ACTION,
+            actor=user,
+            target=user,
+            notes=f"Google Sign-In {'account created' if created else 'login'} via platform={request.data.get('platform', 'unknown')}.",
+        )
+
+        return Response(
+            {
+                "success": True,
+                "message": "Signed in with Google.",
+                "token": token.key,
+                "user": UserProfileSerializer(user).data,
+                "created": created,
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )

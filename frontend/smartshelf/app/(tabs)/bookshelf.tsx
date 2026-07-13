@@ -16,7 +16,10 @@ import { ThemedView } from '@/components/themed-view';
 import { ThemedTextInput } from '@/components/themed-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Book, getBooks, setBooks } from '@/src/store/books';
+import { Book, useBooksStore } from '@/src/store/books';
+import { useCollectionsStore } from '@/src/store/collections';
+import { CollectionPickerModal } from '@/src/components/CollectionPickerModal';
+import { prepareProtectedOpen } from '@/src/lib/protectedPdfAccess';
 import { EXAM_SUBJECTS } from '@/constants/examSubjects';
 
 export default function BookshelfScreen() {
@@ -40,18 +43,22 @@ export default function BookshelfScreen() {
   const [activeSection, setActiveSection] = useState<'Textbooks' | 'Collection'>(
     sectionParam === 'Collection' ? 'Collection' : 'Textbooks'
   );
-  const [collections, setCollections] = useState<
-    { id: string; name: string; bookIds: string[] }[]
-  >([]);
+  const books = useBooksStore((s) => s.books);
+  const collections = useCollectionsStore((s) => s.collections);
+  const createCollection = useCollectionsStore((s) => s.createCollection);
+  const renameCollection = useCollectionsStore((s) => s.renameCollection);
+  const deleteCollectionStore = useCollectionsStore((s) => s.deleteCollection);
+  const addBooksToCollection = useCollectionsStore((s) => s.addBooksToCollection);
+
   const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null);
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectedBookIds, setSelectedBookIds] = useState<string[]>([]);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
+  const [showCollectionPicker, setShowCollectionPicker] = useState(false);
   const [collectionModalMode, setCollectionModalMode] = useState<'create' | 'rename'>('create');
   const [collectionNameInput, setCollectionNameInput] = useState('');
   const [collectionTargetId, setCollectionTargetId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [books, setBooksState] = useState<Book[]>([]);
 
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
@@ -69,12 +76,6 @@ export default function BookshelfScreen() {
     }
     return [normalized];
   }, [boardParam]);
-
-  useEffect(() => {
-    const existingBooks = getBooks();
-    setBooksState(existingBooks);
-    setBooks(existingBooks);
-  }, []);
 
   useEffect(() => {
     if (sectionParam === 'Collection') {
@@ -97,7 +98,14 @@ export default function BookshelfScreen() {
         ? book.title.toLowerCase().includes(query) ||
           book.subject.toLowerCase().includes(query)
         : true;
-      return matchesBoard && matchesSubject && matchesQuery && !book.pdfUri && book.subject !== 'Uploaded';
+      return (
+        matchesBoard &&
+        matchesSubject &&
+        matchesQuery &&
+        !book.pdfUri &&
+        book.subject !== 'Uploaded' &&
+        !book.igcseAssetId
+      );
     });
   }, [books, searchQuery, boardParam, subjectParam, normalizedBoardTags]);
 
@@ -164,40 +172,49 @@ export default function BookshelfScreen() {
       return;
     }
     if (collectionModalMode === 'create') {
-      setCollections((prev) => [
-        ...prev,
-        { id: `collection-${Date.now()}`, name, bookIds: [] },
-      ]);
+      const created = createCollection(name);
+      if (selectedBookIds.length > 0) {
+        addBooksToCollection(created.id, selectedBookIds);
+        resetSelection();
+      }
     } else if (collectionModalMode === 'rename' && collectionTargetId) {
-      setCollections((prev) =>
-        prev.map((c) => (c.id === collectionTargetId ? { ...c, name } : c))
-      );
+      renameCollection(collectionTargetId, name);
     }
     setShowCollectionModal(false);
   };
 
   const deleteCollection = (collectionId: string) => {
-    setCollections((prev) => prev.filter((c) => c.id !== collectionId));
+    deleteCollectionStore(collectionId);
     if (activeCollectionId === collectionId) {
       setActiveCollectionId(null);
     }
   };
 
-  const assignToCollection = (collectionId: string) => {
-    if (selectedBookIds.length === 0) {
+  const openBook = async (item: Book) => {
+    if (item.igcseAssetId) {
+      const result = await prepareProtectedOpen(item.igcseAssetId);
+      if (result.ok) {
+        router.push({
+          pathname: '/igcse/pdf-reader',
+          params: {
+            localUri: result.localUri,
+            bookId: item.igcseAssetId,
+            title: item.title,
+          },
+        });
+        return;
+      }
+      Alert.alert(
+        result.reason === 'not_downloaded' ? 'Download required' : 'Cannot open',
+        result.message,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'IGCSE textbooks', onPress: () => router.push('/igcse/books') },
+        ]
+      );
       return;
     }
-    setCollections((prev) =>
-      prev.map((collection) =>
-        collection.id === collectionId
-          ? {
-              ...collection,
-              bookIds: Array.from(new Set([...collection.bookIds, ...selectedBookIds])),
-            }
-          : collection
-      )
-    );
-    resetSelection();
+    router.push({ pathname: '/book/[id]', params: { id: item.id } });
   };
 
   const renderBook = ({ item }: { item: Book }) => (
@@ -210,11 +227,7 @@ export default function BookshelfScreen() {
         },
         isSelecting && selectedBookIds.includes(item.id) && styles.bookCardSelected,
       ]}
-      onPress={() =>
-        isSelecting
-          ? toggleSelectBook(item.id)
-          : router.push({ pathname: '/book/[id]', params: { id: item.id } })
-      }
+      onPress={() => (isSelecting ? toggleSelectBook(item.id) : void openBook(item))}
       onLongPress={() => {
         if (!isSelecting) {
           setIsSelecting(true);
@@ -397,15 +410,7 @@ export default function BookshelfScreen() {
                     </ThemedText>
                     <TouchableOpacity
                       style={[styles.assignButton, { backgroundColor: tintColor }]}
-                      onPress={() => {
-                        if (collections.length === 0) {
-                          openCreateCollection();
-                        } else {
-                          setActiveCollectionId(null);
-                          setShowCollectionModal(true);
-                          setCollectionModalMode('create');
-                        }
-                      }}
+                      onPress={() => setShowCollectionPicker(true)}
                       activeOpacity={0.8}>
                       <ThemedText style={styles.assignButtonText}>Add to Collection</ThemedText>
                     </TouchableOpacity>
@@ -578,13 +583,27 @@ export default function BookshelfScreen() {
             {collectionModalMode === 'create' && selectedBookIds.length > 0 && (
               <View style={styles.modalHelper}>
                 <ThemedText style={[styles.modalHelperText, { color: mutedTextColor }]}>
-                  After creating, select the collection to add books.
+                  Selected books will be added to this collection.
                 </ThemedText>
               </View>
             )}
           </View>
         </View>
       </Modal>
+
+      <CollectionPickerModal
+        visible={showCollectionPicker}
+        onClose={() => {
+          setShowCollectionPicker(false);
+          resetSelection();
+        }}
+        bookIds={selectedBookIds}
+        cardBg={cardBgColor}
+        tagBg={tagBgColor}
+        textColor={textColor}
+        mutedColor={mutedTextColor}
+        tintColor={tintColor}
+      />
     </ThemedView>
   );
 }

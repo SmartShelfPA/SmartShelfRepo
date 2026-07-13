@@ -25,13 +25,18 @@ export type EpubReaderHandle = {
 type Props = {
   epubUrl: string;
   initialStartCfi?: string | null;
+  /** Merged into fetch/XHR inside the WebView (auth, ngrok bypass, etc.). */
+  fetchHeaders?: Record<string, string>;
   onMessage?: (msg: EpubReaderOutboundMessage) => void;
   /** Bump to force a fresh WebView document (e.g. retry after failure). */
   sessionKey?: number;
 };
 
 export const EpubReaderWebView = forwardRef<EpubReaderHandle, Props>(
-  function EpubReaderWebView({ epubUrl, initialStartCfi, onMessage, sessionKey = 0 }, ref) {
+  function EpubReaderWebView(
+    { epubUrl, initialStartCfi, fetchHeaders, onMessage, sessionKey = 0 },
+    ref
+  ) {
     const webRef = useRef<WebView>(null);
 
     const sendToWeb = useCallback((payload: Record<string, unknown>) => {
@@ -60,7 +65,7 @@ export const EpubReaderWebView = forwardRef<EpubReaderHandle, Props>(
       [onMessage]
     );
 
-    const html = buildEpubReaderHtml(epubUrl, initialStartCfi);
+    const html = buildEpubReaderHtml(epubUrl, initialStartCfi, fetchHeaders);
 
     return (
       <View style={styles.wrap}>

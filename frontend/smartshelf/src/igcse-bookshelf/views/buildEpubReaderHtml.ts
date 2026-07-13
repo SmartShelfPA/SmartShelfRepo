@@ -6,12 +6,17 @@
  * A custom dev build is not required unless you switch to native Readium bindings later.
  *
  * Reliability:
- * - Master timeout always posts `ready` so the native "Preparing EPUB" overlay cannot hang forever.
- * - `ready` is sent only after first successful `display()` (or after error/timeout) so `rendition.next` is safe.
+ * - Master timeout posts `error` only (never `ready`) so native UI can show failure without a false success.
+ * - `ready` is sent only after first successful `display()`.
  */
-export function buildEpubReaderHtml(epubUrl: string, initialStartCfi?: string | null): string {
+export function buildEpubReaderHtml(
+  epubUrl: string,
+  initialStartCfi?: string | null,
+  fetchHeaders?: Record<string, string>
+): string {
   const urlJson = JSON.stringify(epubUrl);
   const cfiJson = JSON.stringify(initialStartCfi ?? '');
+  const headersJson = JSON.stringify(fetchHeaders ?? {});
 
   return `<!DOCTYPE html>
 <html>
@@ -30,10 +35,50 @@ export function buildEpubReaderHtml(epubUrl: string, initialStartCfi?: string | 
     (function () {
       var epubUrl = ${urlJson};
       var initialCfi = ${cfiJson};
+      var extraFetchHeaders = ${headersJson};
       var readySent = false;
       var masterTimer = null;
       var book = null;
       var rendition = null;
+
+      (function patchNetwork() {
+        function mergeInit(init) {
+          init = init || {};
+          var headers = new Headers(init.headers || {});
+          Object.keys(extraFetchHeaders).forEach(function (key) {
+            if (!headers.has(key)) headers.set(key, extraFetchHeaders[key]);
+          });
+          init.headers = headers;
+          return init;
+        }
+        if (window.fetch) {
+          var origFetch = window.fetch.bind(window);
+          window.fetch = function (input, init) {
+            return origFetch(input, mergeInit(init || {}));
+          };
+        }
+        var XOpen = XMLHttpRequest.prototype.open;
+        var XSend = XMLHttpRequest.prototype.send;
+        var XSetHeader = XMLHttpRequest.prototype.setRequestHeader;
+        XMLHttpRequest.prototype.open = function (method, url) {
+          this._ssHeaders = {};
+          return XOpen.apply(this, arguments);
+        };
+        XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+          if (!this._ssHeaders) this._ssHeaders = {};
+          this._ssHeaders[name] = value;
+          return XSetHeader.apply(this, arguments);
+        };
+        XMLHttpRequest.prototype.send = function () {
+          var self = this;
+          Object.keys(extraFetchHeaders).forEach(function (key) {
+            if (!self._ssHeaders || !self._ssHeaders[key]) {
+              XSetHeader.call(self, key, extraFetchHeaders[key]);
+            }
+          });
+          return XSend.apply(this, arguments);
+        };
+      })();
 
       function send(payload) {
         try {
@@ -51,6 +96,7 @@ export function buildEpubReaderHtml(epubUrl: string, initialStartCfi?: string | 
         } catch (e0) {}
         if (errMsg) {
           send({ type: 'error', message: String(errMsg) });
+          return;
         }
         send({ type: 'ready' });
       }

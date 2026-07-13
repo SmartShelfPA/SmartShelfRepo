@@ -1,3 +1,5 @@
+import { apiRequest } from '@/services/api';
+import { djangoQuestionRecordToNormalized } from '@/src/api/mappers/djangoPracticeQuestion';
 import { normalizeQuestionList } from '@/src/api/mappers/questionFromUnknown';
 import type { PracticeExamType } from '@/src/types/exam';
 import type { NormalizedQuestion } from '@/src/types/practice';
@@ -103,7 +105,6 @@ function mockQuestions(q: PracticeQuery): NormalizedQuestion[] {
       { id: 'D', labelHtml: '<p>Fourth option</p>' },
     ],
     correctOptionId: 'B',
-    explanationHtml: '<p>This is mock explanation text for local UI testing.</p>',
     orderIndex: idx,
   });
   return Array.from({ length: PRACTICE_SESSION_QUESTION_TARGET }, (_, idx) => base(idx));
@@ -229,7 +230,76 @@ export async function fetchPracticeSubjects(
 
 export async function fetchPracticeYears(examType: PracticeExamType): Promise<number[]> {
   void examType;
-  return Array.from({ length: 13 }, (_, idx) => 2013 - idx);
+  /** Years with seeded/local ALOC data; falls back to recent years when using hosted API. */
+  return [2008, 2006, 2013, 2012, 2011, 2010, 2009, 2007, 2005, 2004];
+}
+
+/** Render cold start + server-side ALOC aggregation can exceed the default 10s API timeout. */
+const PRACTICE_BACKEND_TIMEOUT_MS = 120_000;
+
+function formatPracticeLoadError(error: unknown): string {
+  if (error && typeof error === 'object') {
+    const name = (error as Error).name ?? '';
+    const message = (error as Error).message ?? '';
+    if (name === 'AbortError' || /abort/i.test(message)) {
+      return (
+        'Practice is taking too long to load. The server may be waking up — wait a few seconds and tap Retry.'
+      );
+    }
+    if (message.trim()) return message;
+  }
+  return 'Could not load practice questions. Check your connection and try again.';
+}
+
+async function fetchPracticeQuestionsFromBackend(
+  query: PracticeQuery,
+  options?: FetchPracticeQuestionsOptions
+): Promise<NormalizedQuestion[]> {
+  const onProgress = options?.onProgress;
+  const examKind = query.examType === 'WAEC' ? 'waec' : 'jamb';
+  onProgress?.(0, PRACTICE_SESSION_QUESTION_TARGET);
+
+  let response: Response;
+  try {
+    response = await apiRequest(
+      `/v1/practice/${examKind}/questions/?${new URLSearchParams({
+        subject: query.subject.toLowerCase(),
+        year: String(query.year),
+      }).toString()}`,
+      { timeoutMs: PRACTICE_BACKEND_TIMEOUT_MS }
+    );
+  } catch (error) {
+    throw new Error(formatPracticeLoadError(error));
+  }
+
+  const raw = await response.json().catch(() => null);
+  if (!response.ok) {
+    const hint = readAlocErrorMessage(raw);
+    throw new Error(
+      hint ?? `SmartShelf practice API failed (${response.status}). Sign in and check server ALOC config.`
+    );
+  }
+
+  const list = Array.isArray(raw) ? raw : [];
+  const mapped = list
+    .map((item) =>
+      djangoQuestionRecordToNormalized(
+        item && typeof item === 'object' ? (item as Record<string, unknown>) : {}
+      )
+    )
+    .filter((q): q is NormalizedQuestion => q !== null)
+    .slice(0, PRACTICE_SESSION_QUESTION_TARGET)
+    .map((q, orderIndex) => ({ ...q, orderIndex }));
+
+  if (mapped.length === 0) {
+    throw new Error(
+      readAlocErrorMessage(raw) ??
+        'No questions returned from SmartShelf for this subject and year. Check ALOC_ACCESS_TOKEN on the server.'
+    );
+  }
+
+  onProgress?.(mapped.length, PRACTICE_SESSION_QUESTION_TARGET);
+  return mapped;
 }
 
 export async function fetchPracticeQuestions(
@@ -242,15 +312,31 @@ export async function fetchPracticeQuestions(
     throw new Error('Open IGCSE MCQs run from the IGCSE bookshelf (MCQ revision), not the ALOC practice flow.');
   }
 
-  const token = ALOC_ACCESS_TOKEN?.trim();
+  /** Prefer Django backend so ALOC token stays on the server (production APK). */
+  try {
+    return await fetchPracticeQuestionsFromBackend(query, options);
+  } catch (backendErr) {
+    const token = ALOC_ACCESS_TOKEN?.trim();
+    if (token) {
+      console.warn('[Practice] Backend fetch failed; falling back to direct ALOC.', backendErr);
+    } else if (__DEV__) {
+      console.warn('[Practice] Backend unavailable; using local mock questions for UI dev.', backendErr);
+      onProgress?.(0, PRACTICE_SESSION_QUESTION_TARGET);
+      const mocks = mockQuestions(query);
+      onProgress?.(mocks.length, PRACTICE_SESSION_QUESTION_TARGET);
+      return mocks;
+    } else {
+      throw backendErr instanceof Error
+        ? backendErr
+        : new Error('Could not load practice questions from SmartShelf.');
+    }
+  }
 
-  /** Local / misconfigured builds: keep UI usable without an ALOC account */
+  const token = ALOC_ACCESS_TOKEN?.trim();
   if (!token) {
-    console.warn('[ALOC] Set EXPO_PUBLIC_ALOC_ACCESS_TOKEN to load live questions.');
-    onProgress?.(0, PRACTICE_SESSION_QUESTION_TARGET);
-    const mocks = mockQuestions(query);
-    onProgress?.(mocks.length, PRACTICE_SESSION_QUESTION_TARGET);
-    return mocks;
+    throw new Error(
+      'Practice questions are unavailable. Sign in and ensure the SmartShelf server has ALOC_ACCESS_TOKEN configured.'
+    );
   }
 
   onProgress?.(0, PRACTICE_SESSION_QUESTION_TARGET);

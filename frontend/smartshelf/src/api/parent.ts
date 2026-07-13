@@ -27,7 +27,7 @@ const FALLBACK_DASHBOARD: ParentDashboardData = {
 
 export async function fetchParentDashboard(): Promise<ParentDashboardData> {
   try {
-    const res = await apiRequest('/parent/dashboard');
+    const res = await apiRequest('/v1/parent/dashboard/');
     if (!res.ok) throw new Error('Failed to load parent dashboard');
     return res.json();
   } catch {

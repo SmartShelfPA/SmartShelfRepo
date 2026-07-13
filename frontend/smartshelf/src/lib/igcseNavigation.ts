@@ -2,6 +2,7 @@ import type { Href } from 'expo-router';
 import type { Router } from 'expo-router';
 
 import { getBackendBaseUrl } from '@/services/api';
+import { buildIgcsSimulatorUrl } from '@/src/lib/igcseSimulatorUrl';
 
 /** Open PDF in the in-app viewer (proxies external URLs via Django). */
 export function openIgcsPdf(router: Router, pdfUrl: string, title?: string): void {
@@ -17,13 +18,14 @@ export function openIgcsPdf(router: Router, pdfUrl: string, title?: string): voi
 
 export function openIgcsSimulator(
   router: Router,
-  params: { url: string; title?: string; setId?: string }
+  params: { url?: string; title?: string; setId?: string }
 ): void {
-  if (!params.url.trim()) return;
+  const resolved = buildIgcsSimulatorUrl(params.setId, params.url).trim();
+  if (!resolved) return;
   router.push({
     pathname: '/igcse/simulator',
     params: {
-      url: params.url.trim(),
+      url: resolved,
       title: params.title ?? 'Exam simulator',
       ...(params.setId ? { setId: params.setId } : {}),
     },

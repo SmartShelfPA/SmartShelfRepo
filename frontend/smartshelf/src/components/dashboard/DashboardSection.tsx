@@ -57,7 +57,7 @@ export function DashboardSection({ data, isLoading, error, onRetry }: Props) {
                     : ''}
                 </ThemedText>
                 <TouchableOpacity
-                  onPress={() => router.push('/igcse-coming-soon' as Href)}
+                  onPress={() => router.push('/igcse' as Href)}
                   activeOpacity={0.85}
                   style={styles.inlineLink}>
                   <ThemedText style={{ color: tintColor, fontWeight: '900' }}>Open IGCSE shelf</ThemedText>

@@ -27,6 +27,52 @@ services:
       timeout: 5s
       retries: 10
 
+  aloc-db:
+    image: mysql:8.0
+    container_name: smartshelf-aloc-db
+    restart: unless-stopped
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: aloc
+      MYSQL_USER: aloc
+      MYSQL_PASSWORD: aloc
+      MYSQL_ROOT_PASSWORD: rootsecret
+    volumes:
+      - smartshelf_aloc_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-prootsecret"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 25s
+
+  aloc:
+    build:
+      context: ./aloc-endpoints
+      dockerfile: Dockerfile
+    container_name: smartshelf-aloc
+    restart: unless-stopped
+    depends_on:
+      aloc-db:
+        condition: service_healthy
+    volumes:
+      - ./aloc-endpoints:/var/www/html
+    environment:
+      DB_HOST: aloc-db
+      DB_PORT: "3306"
+      DB_DATABASE: aloc
+      DB_USERNAME: aloc
+      DB_PASSWORD: aloc
+    healthcheck:
+      test: ["CMD-SHELL", "php -r \"exit(@file_get_contents('http://127.0.0.1:8000')===false?1:0);\""]
+      interval: 15s
+      timeout: 15s
+      retries: 8
+      start_period: 240s
+
   quotes:
     image: hashicorp/http-echo:1.0.0
     container_name: smartshelf-quotes
@@ -48,6 +94,8 @@ services:
         condition: service_healthy
       quotes:
         condition: service_started
+      aloc:
+        condition: service_healthy
     environment:
       POSTGRES_DB: smartshelf
       POSTGRES_USER: postgres
@@ -66,10 +114,22 @@ services:
       # Dev only: API accepts requests without Bearer for N minutes after container start (0 = off).
       AUTH_FREE_FOR_MINUTES: ${AUTH_FREE_FOR_MINUTES:-0}
       AUTH_BYPASS_USER_ID: ${AUTH_BYPASS_USER_ID:-}
+      # WAEC/JAMB practice — local ALOC in Docker (override for hosted questions.aloc.com.ng).
+      ALOC_API_BASE_URL: ${ALOC_API_BASE_URL:-http://aloc:8000/api/v2}
+      ALOC_ACCESS_TOKEN: ${ALOC_ACCESS_TOKEN:-smartshelf-dev-token}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GOOGLE_CLIENT_ID_WEB: ${GOOGLE_CLIENT_ID_WEB:-}
+      GOOGLE_CLIENT_ID_IOS: ${GOOGLE_CLIENT_ID_IOS:-}
+      GOOGLE_CLIENT_ID_ANDROID: ${GOOGLE_CLIENT_ID_ANDROID:-}
+      GOOGLE_CLIENT_SECRET_WEB: ${GOOGLE_CLIENT_SECRET_WEB:-}
+      BUNDLED_IGCSE_EPUB_DIR: /app/bundled-igcse/epubs
+      BUNDLED_IGCSE_MANIFEST: /app/bundled-igcse/manifest.json
     ports:
       - "8000:8000"
     volumes:
       - ./backend/smartshelfbackend:/app/smartshelfbackend
+      - ./backend/vendor:/app/vendor
+      - ./bundled-igcse:/app/bundled-igcse:ro
 
   ngrok:
     image: ngrok/ngrok:latest
@@ -87,3 +147,4 @@ services:
 
 volumes:
   smartshelf_postgres_data:
+  smartshelf_aloc_mysql_data:

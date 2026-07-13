@@ -13,7 +13,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { getIGCSEBookDetail } from '@/src/services/igcseEpubService';
+import { loadIgcsBookDetailSafe } from '@/src/services/igcseEpubService';
 import { useIgcsReaderStore } from '@/src/store/igcseReaderStore';
 import type { IgcsTextbook } from '@/src/types/igcse';
 
@@ -46,11 +46,16 @@ export default function IgcsBookDetailScreen() {
     }
     setLoading(true);
     setError(null);
-    void getIGCSEBookDetail(bookId).then((b) => {
+    void loadIgcsBookDetailSafe(bookId).then((result) => {
       if (cancelled) return;
-      setBook(b);
+      if (!result.ok) {
+        setBook(null);
+        setError(result.error);
+        setLoading(false);
+        return;
+      }
+      setBook(result.book);
       setLoading(false);
-      if (!b) setError('Book not found');
     });
     return () => {
       cancelled = true;

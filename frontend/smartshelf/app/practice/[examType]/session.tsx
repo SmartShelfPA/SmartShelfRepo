@@ -125,11 +125,6 @@ export default function PracticeSessionScreen() {
     async (question: NormalizedQuestion) => {
       if (!examType) return;
       if (hasBundledExplanation(question)) return;
-      const keyPresent = !!process.env.EXPO_PUBLIC_OPENAI_API_KEY?.trim();
-      if (!keyPresent) {
-        setAiExplainError('Add EXPO_PUBLIC_OPENAI_API_KEY to frontend/.env and restart Expo.');
-        return;
-      }
       if (aiExplainCacheRef.current[question.id]) return;
 
       explainAbortRef.current?.abort();

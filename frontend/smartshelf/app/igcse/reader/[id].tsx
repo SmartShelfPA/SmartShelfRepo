@@ -22,13 +22,15 @@ import type { EpubReaderHandle, EpubReaderOutboundMessage } from '@/src/igcse-bo
 import { EpubReaderWebView } from '@/src/igcse-bookshelf/views/EpubReaderWebView';
 import { flattenEpubToc, type FlatTocEntry } from '@/src/igcse-bookshelf/views/flattenToc';
 import { probeEpubUrl } from '@/src/lib/probeEpubUrl';
+import { resolveIgcsReaderEpubUrl } from '@/src/lib/igcseEpubReaderUrl';
+import { getApiExtraHeaders } from '@/services/api';
 import {
   deleteBookmarkRemote,
   deleteHighlightRemote,
   deleteNoteRemote,
   fetchIgcsReaderAnnotationsBundle,
-  getIGCSEBookDetail,
   isBackendIgcsBookId,
+  loadIgcsBookDetailSafe,
   isBackendIgcsEntityId,
   saveBookmarkRemote,
   saveHighlightRemote,
@@ -75,14 +77,37 @@ export default function IgcsReaderScreen() {
   );
   const [readerError, setReaderError] = useState<string | null>(null);
   const [epubReady, setEpubReady] = useState(false);
-  /** Probe + WebView lifecycle: never leave the user on an infinite overlay. */
-  const [epubGate, setEpubGate] = useState<'checking' | 'rendering' | 'blocked'>('checking');
+  /** Probe + WebView lifecycle: checking → rendering → ready | blocked */
+  const [epubGate, setEpubGate] = useState<'checking' | 'rendering' | 'ready' | 'blocked'>('checking');
   const [epubGateDetail, setEpubGateDetail] = useState<string | null>(null);
   const [epubSessionKey, setEpubSessionKey] = useState(0);
   const [focusMode, setFocusMode] = useState(false);
   const [chapterHint, setChapterHint] = useState('');
 
+  const [epubFetchHeaders, setEpubFetchHeaders] = useState<Record<string, string>>({});
+  const [readerEpubUrl, setReaderEpubUrl] = useState('');
+
   const reader = useIgcsReaderSession(bookId);
+
+  useEffect(() => {
+    if (!bookId || !book?.epubUrl?.trim()) {
+      setReaderEpubUrl('');
+      return;
+    }
+    let cancelled = false;
+    void resolveIgcsReaderEpubUrl(bookId, book.epubUrl).then((url) => {
+      if (!cancelled) setReaderEpubUrl(url);
+    });
+    return () => { cancelled = true; };
+  }, [book?.epubUrl, bookId]);
+
+  useEffect(() => {
+    // Only pass non-auth headers (e.g. ngrok-skip-browser-warning) to the WebView.
+    // Auth is handled via ?token= query param on the EPUB URL itself, avoiding
+    // CORS preflight issues that Authorization headers trigger in WebViews.
+    const headers: Record<string, string> = { ...getApiExtraHeaders() };
+    setEpubFetchHeaders(headers);
+  }, [bookId]);
 
   useEffect(() => {
     if (!bookId) return;
@@ -93,21 +118,15 @@ export default function IgcsReaderScreen() {
     setEpubReady(false);
     setEpubGate('checking');
     setEpubGateDetail(null);
-    void getIGCSEBookDetail(bookId).then((b) => {
+    void loadIgcsBookDetailSafe(bookId).then((result) => {
       if (cancelled) return;
-      if (!b) {
+      if (!result.ok) {
         setBook(null);
-        setBookError('This book could not be loaded. Check your connection or try again.');
+        setBookError(result.error);
         setBookLoading(false);
         return;
       }
-      if (!b.epubUrl?.trim()) {
-        setBook(null);
-        setBookError('No EPUB file is linked for this title yet.');
-        setBookLoading(false);
-        return;
-      }
-      setBook(b);
+      setBook(result.book);
       setBookLoading(false);
     });
     return () => {
@@ -134,8 +153,8 @@ export default function IgcsReaderScreen() {
   }, [bookId, book]);
 
   useEffect(() => {
-    if (!book?.epubUrl?.trim()) return;
-    const url = book.epubUrl.trim();
+    if (!readerEpubUrl?.trim()) return;
+    const url = readerEpubUrl.trim();
     let cancelled = false;
     setEpubGate('checking');
     setEpubGateDetail(null);
@@ -144,23 +163,25 @@ export default function IgcsReaderScreen() {
 
     void (async () => {
       try {
-        await probeEpubUrl(url);
+        const result = await probeEpubUrl(url, undefined, epubFetchHeaders);
+        if (cancelled) return;
+        if (result === 'soft-fail') {
+          console.log('[SmartShelf][EPUB] probe soft-fail, letting WebView try anyway');
+        }
+        setEpubGate('rendering');
       } catch (e) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : 'EPUB URL check failed';
         setEpubGateDetail(msg);
         setEpubGate('blocked');
         setEpubReady(true);
-        return;
       }
-      if (cancelled) return;
-      setEpubGate('rendering');
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [book?.epubUrl, bookId, epubSessionKey]);
+  }, [readerEpubUrl, bookId, epubSessionKey, epubFetchHeaders]);
 
   useEffect(() => {
     if (epubGate !== 'rendering') return;
@@ -208,10 +229,11 @@ export default function IgcsReaderScreen() {
       }
       if (msg.type === 'ready') {
         setEpubReady(true);
+        setEpubGate('ready');
+        setEpubGateDetail(null);
         setReaderError(null);
       }
       if (msg.type === 'relocated') {
-        setEpubReady(true);
         lastAnchorRef.current = {
           startCfi: msg.startCfi,
           endCfi: msg.endCfi,
@@ -230,7 +252,7 @@ export default function IgcsReaderScreen() {
         }
       }
       if (msg.type === 'error') {
-        setReaderError(null);
+        setReaderError(msg.message);
         setEpubGateDetail(msg.message);
         setEpubGate('blocked');
         setEpubReady(true);
@@ -358,31 +380,30 @@ export default function IgcsReaderScreen() {
     [bookId]
   );
 
+  const retryEpubOpen = useCallback(() => {
+    setReaderError(null);
+    setEpubGateDetail(null);
+    setEpubReady(false);
+    setEpubGate('checking');
+    setEpubSessionKey((k) => k + 1);
+  }, []);
+
   const retryLoadBook = useCallback(() => {
     if (!bookId) return;
     setBookLoading(true);
     setBookError(null);
-    void getIGCSEBookDetail(bookId).then((b) => {
-      if (!b) {
+    void loadIgcsBookDetailSafe(bookId).then((result) => {
+      if (!result.ok) {
         setBook(null);
-        setBookError('This book could not be loaded.');
+        setBookError(result.error);
         setBookLoading(false);
         return;
       }
-      if (!b.epubUrl?.trim()) {
-        setBook(null);
-        setBookError('No EPUB file is linked for this title yet.');
-        setBookLoading(false);
-        return;
-      }
-      setBook(b);
+      setBook(result.book);
       setBookLoading(false);
-      setEpubReady(false);
-      setEpubGate('checking');
-      setEpubGateDetail(null);
-      setEpubSessionKey((k) => k + 1);
+      retryEpubOpen();
     });
-  }, [bookId]);
+  }, [bookId, retryEpubOpen]);
 
   if (!bookId) {
     return (
@@ -600,15 +621,11 @@ export default function IgcsReaderScreen() {
               {epubGateDetail ?? 'Unknown error'}
             </ThemedText>
             <ThemedText style={[styles.epubGateUrl, { color: mutedTextColor }]} selectable numberOfLines={4}>
-              {book.epubUrl}
+              {readerEpubUrl || book.epubUrl}
             </ThemedText>
             <TouchableOpacity
               style={[styles.epubRetryBtn, { borderColor }]}
-              onPress={() => {
-                setReaderError(null);
-                setEpubGateDetail(null);
-                setEpubSessionKey((k) => k + 1);
-              }}
+              onPress={retryEpubOpen}
               activeOpacity={0.85}>
               <ThemedText style={{ color: tintColor, fontWeight: '700' }}>Try again</ThemedText>
             </TouchableOpacity>
@@ -621,7 +638,7 @@ export default function IgcsReaderScreen() {
               style={{ color: mutedTextColor, marginTop: 6, fontSize: 12, textAlign: 'center', paddingHorizontal: 16 }}
               selectable
               numberOfLines={5}>
-              {book.epubUrl}
+              {readerEpubUrl || book.epubUrl}
             </ThemedText>
           </View>
         ) : (
@@ -629,11 +646,12 @@ export default function IgcsReaderScreen() {
             <EpubReaderWebView
               ref={webRef}
               sessionKey={epubSessionKey}
-              epubUrl={book.epubUrl}
+              epubUrl={readerEpubUrl || book.epubUrl}
+              fetchHeaders={epubFetchHeaders}
               initialStartCfi={initialCfi}
               onMessage={onWebMessage}
             />
-            {!epubReady ? (
+            {epubGate === 'rendering' ? (
               <View style={[styles.epubLoading, { backgroundColor }]}>
                 <ActivityIndicator color={tintColor} />
                 <ThemedText style={{ color: mutedTextColor, marginTop: 8 }}>Preparing EPUB…</ThemedText>
@@ -647,7 +665,7 @@ export default function IgcsReaderScreen() {
                   }}
                   selectable
                   numberOfLines={4}>
-                  {book.epubUrl}
+                  {readerEpubUrl || book.epubUrl}
                 </ThemedText>
               </View>
             ) : null}

@@ -4,6 +4,7 @@ from rest_framework import serializers
 from .models import (
     Book,
     Category,
+    DataRequest,
     Organization,
     PublisherProfile,
     ReadingProgress,
@@ -22,6 +23,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
     managed_student_ids = serializers.PrimaryKeyRelatedField(
         source="managed_students", many=True, read_only=True
     )
+    has_accepted_policies = serializers.BooleanField(read_only=True)
+    is_minor_account = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = UserProfile
@@ -38,6 +41,21 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "staff_department",
             "organization",
             "managed_student_ids",
+            # Compliance / consent
+            "terms_accepted_at",
+            "terms_version",
+            "privacy_accepted_at",
+            "privacy_version",
+            "analytics_consent",
+            "analytics_consent_at",
+            "school_managed",
+            "has_accepted_policies",
+            "is_minor_account",
+        )
+        read_only_fields = (
+            "id", "terms_accepted_at", "terms_version", "privacy_accepted_at",
+            "privacy_version", "analytics_consent_at", "school_managed",
+            "has_accepted_policies", "is_minor_account",
         )
 
 
@@ -245,3 +263,24 @@ class PublisherBookUploadSerializer(serializers.ModelSerializer):
                 categories.append(category)
             instance.category.set(categories)
         return instance
+
+
+class DataRequestSerializer(serializers.ModelSerializer):
+    request_type_display = serializers.CharField(
+        source="get_request_type_display", read_only=True
+    )
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+
+    class Meta:
+        model = DataRequest
+        fields = (
+            "id",
+            "request_type",
+            "request_type_display",
+            "status",
+            "status_display",
+            "notes",
+            "submitted_at",
+            "resolved_at",
+        )
+        read_only_fields = ("id", "status", "submitted_at", "resolved_at")

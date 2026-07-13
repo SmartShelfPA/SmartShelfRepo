@@ -16,6 +16,8 @@ export type Book = {
   examTags: ('IGCSE' | 'WAEC')[] | string[];
   coverUri?: string;
   pdfUri?: string;
+  /** Protected IGCSE PDF asset id (for collection + offline open). */
+  igcseAssetId?: string;
   author?: string;
   lastAccessedAt?: string;
   progressPercent?: number;

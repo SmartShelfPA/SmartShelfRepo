@@ -1,4 +1,8 @@
 import { apiRequest } from '@/services/api';
+import {
+  getBundledIgcsTextbookById,
+  getBundledIgcsTextbooks,
+} from '@/src/data/bundledIgcsTextbooks';
 import { normalizeIgcsTextbook, normalizeIgcsTextbookList } from '@/src/api/mappers/igcseFromUnknown';
 import type { IgcsTextbook } from '@/src/types/igcse';
 
@@ -23,28 +27,45 @@ function messageFromBody(raw: unknown, fallback: string): string {
   return [detail, error].filter(Boolean).join(' — ') || fallback;
 }
 
+function mergeBundledWithApi(apiBooks: IgcsTextbook[]): IgcsTextbook[] {
+  const bundled = getBundledIgcsTextbooks();
+  const bundledIds = new Set(bundled.map((b) => b.id));
+  const extra = apiBooks.filter((b) => !bundledIds.has(b.id));
+  return [...bundled, ...extra];
+}
+
 /**
- * EPUB textbook catalog from Django `GET /api/v1/igcse/books/` (`learning.IgcsBookListView`).
- * Requires authentication.
+ * EPUB textbook catalog: repo-bundled titles first, then Django admin catalog when available.
  */
 export async function fetchIgcsTextbooks(): Promise<IgcsTextbook[]> {
-  const response = await apiRequest('/v1/igcse/books/', { method: 'GET' });
-  const raw = await response.json().catch(() => null);
+  const bundled = getBundledIgcsTextbooks();
+  try {
+    const response = await apiRequest('/v1/igcse/books/', { method: 'GET' });
+    const raw = await response.json().catch(() => null);
 
-  if (response.status === 401 || response.status === 403) {
-    throw new IgcsBooksFetchError('Sign in to load IGCSE textbooks.', response.status);
-  }
-  if (!response.ok) {
-    throw new IgcsBooksFetchError(
-      messageFromBody(raw, `Could not load textbooks (${response.status})`),
-      response.status
-    );
-  }
+    if (response.status === 401 || response.status === 403) {
+      if (bundled.length > 0) return bundled;
+      throw new IgcsBooksFetchError('Sign in to load IGCSE textbooks.', response.status);
+    }
+    if (!response.ok) {
+      if (bundled.length > 0) return bundled;
+      throw new IgcsBooksFetchError(
+        messageFromBody(raw, `Could not load textbooks (${response.status})`),
+        response.status
+      );
+    }
 
-  return normalizeIgcsTextbookList(raw);
+    return mergeBundledWithApi(normalizeIgcsTextbookList(raw));
+  } catch (e) {
+    if (bundled.length > 0) return bundled;
+    throw e;
+  }
 }
 
 export async function fetchIgcsTextbookById(bookId: string): Promise<IgcsTextbook | null> {
+  const bundled = getBundledIgcsTextbookById(bookId);
+  if (bundled) return bundled;
+
   const response = await apiRequest(`/v1/igcse/books/${encodeURIComponent(bookId)}/`, {
     method: 'GET',
   });

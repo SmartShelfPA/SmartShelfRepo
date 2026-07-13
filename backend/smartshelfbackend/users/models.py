@@ -613,3 +613,100 @@ class ReadingProgress(models.Model):
         if self.user_id and self.book_id:
             self.organization_id = self.user.organization_id
         super().save(*args, **kwargs)
+
+
+class TeacherNote(models.Model):
+    """Private teacher notes about a student; optionally shared with parents."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    teacher = models.ForeignKey(
+        UserProfile,
+        on_delete=models.CASCADE,
+        related_name="teacher_notes_written",
+        limit_choices_to={"role": UserProfile.Role.STAFF},
+    )
+    student = models.ForeignKey(
+        UserProfile,
+        on_delete=models.CASCADE,
+        related_name="teacher_notes_received",
+        limit_choices_to={"role": UserProfile.Role.STUDENT},
+    )
+    note = models.TextField()
+    shared_with_parent = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Note for {self.student.username} by {self.teacher.username}"
+
+
+class ParentInvite(models.Model):
+    """Invitation for a parent/guardian to link to a specific student account."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACCEPTED = "accepted", "Accepted"
+        EXPIRED = "expired", "Expired"
+        REVOKED = "revoked", "Revoked"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    student = models.ForeignKey(
+        UserProfile,
+        on_delete=models.CASCADE,
+        related_name="parent_invites",
+        limit_choices_to={"role": UserProfile.Role.STUDENT},
+    )
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="parent_invites",
+    )
+    invite_email = models.EmailField(
+        blank=True,
+        help_text="Optional email the invite was sent to (for validation hints).",
+    )
+    code = models.CharField(max_length=12, unique=True, db_index=True)
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    created_by = models.ForeignKey(
+        UserProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="parent_invites_created",
+    )
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING
+    )
+    expires_at = models.DateTimeField()
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    accepted_by = models.ForeignKey(
+        UserProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="accepted_parent_invites",
+        limit_choices_to={"role": UserProfile.Role.PARENT},
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Parent invite {self.code} → {self.student.username}"
+
+    @property
+    def is_redeemable(self) -> bool:
+        if self.status != self.Status.PENDING:
+            return False
+        if timezone.now() >= self.expires_at:
+            return False
+        return True
+
+    def mark_expired_if_needed(self) -> None:
+        if self.status == self.Status.PENDING and timezone.now() >= self.expires_at:
+            self.status = self.Status.EXPIRED
+            self.save(update_fields=["status"])

@@ -27,7 +27,8 @@ export function IgcseTextbookCard({
   disabled = false,
 }: Props) {
   return (
-    <View style={[styles.card, { backgroundColor: cardBg, shadowColor: '#000', opacity: disabled ? 0.5 : 1 }]}>
+    <View
+      style={[styles.card, { backgroundColor: cardBg, shadowColor: '#000', opacity: disabled ? 0.5 : 1 }]}>
       <TouchableOpacity
         style={styles.main}
         onPress={onOpen}

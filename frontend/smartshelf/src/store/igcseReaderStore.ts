@@ -23,6 +23,14 @@ type BookReaderSlice = {
   settings: ReaderVisualSettings;
 };
 
+const DEFAULT_SLICE: BookReaderSlice = {
+  progress: null,
+  bookmarks: [],
+  highlights: [],
+  notes: [],
+  settings: { fontScale: 1, readerTheme: 'light' },
+};
+
 const defaultSlice = (): BookReaderSlice => ({
   progress: null,
   bookmarks: [],
@@ -335,5 +343,5 @@ export const useIgcsReaderStore = create<IgcsReaderState>()(
 );
 
 export function selectBookSlice(bookId: string) {
-  return (s: IgcsReaderState): BookReaderSlice => s.books[bookId] ?? defaultSlice();
+  return (s: IgcsReaderState): BookReaderSlice => s.books[bookId] ?? DEFAULT_SLICE;
 }

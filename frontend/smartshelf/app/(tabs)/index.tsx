@@ -14,6 +14,7 @@ import { useProfileAvatar } from '@/src/hooks/useProfileAvatar';
 import { fetchQuote, Quote } from '@/services/quotes';
 import { DashboardSection } from '@/src/components/dashboard/DashboardSection';
 import { useDashboardData } from '@/src/hooks/useDashboardData';
+import { useStreak } from '@/src/hooks/useStreak';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -32,6 +33,7 @@ export default function HomeScreen() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const { data: dashboard, isLoading: dashLoading, error: dashError, refetch: refetchDash } =
     useDashboardData();
+  const streakDays = useStreak(dashboard?.recentSessions ?? []);
 
   useEffect(() => {
     let isMounted = true;
@@ -83,7 +85,7 @@ export default function HomeScreen() {
       <HomeHeader
         userInitials={userInitials}
         avatarUri={avatarUri ?? undefined}
-        rightContent={<StreakBadge streakDays={7} />}
+        rightContent={<StreakBadge streakDays={streakDays} />}
       />
       <ScrollView
         style={styles.scrollView}
@@ -105,19 +107,16 @@ export default function HomeScreen() {
               TEXTBOOKS
             </ThemedText>
             <ThemedView style={styles.examBoardRow}>
-              {[{ label: 'IGCSE shelf', subtitle: 'Coming soon', icon: 'auto-stories' }].map((board) => (
+              {[{ label: 'IGCSE shelf', icon: 'auto-stories' }].map((board) => (
                 <TouchableOpacity
                   key={board.label}
                   style={[styles.examBoardIcon, { borderColor: oliveBorder, backgroundColor: cardBgColor }]}
                   onPress={() => {
-                    router.push('/igcse-coming-soon' as Href);
+                    router.push('/igcse' as Href);
                   }}
                   activeOpacity={0.8}>
                   <MaterialIcons name={board.icon as any} size={24} color={tintColor} />
                   <ThemedText style={styles.examBoardLabel}>{board.label}</ThemedText>
-                  {'subtitle' in board && board.subtitle ? (
-                    <ThemedText style={styles.examBoardSubtitle}>{board.subtitle}</ThemedText>
-                  ) : null}
                 </TouchableOpacity>
               ))}
             </ThemedView>

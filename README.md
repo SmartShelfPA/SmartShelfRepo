@@ -11,6 +11,18 @@ docker compose up --build
 Backend API: `http://localhost:8000`  
 PostgreSQL: `localhost:5432` (`postgres` / `postgres`, db `smartshelf`)
 
+### Mobile APK / schools not loading on sign-up
+
+Release builds need a **public** API URL (not `192.168.x.x`). See [docs/MOBILE_API_SETUP.md](docs/MOBILE_API_SETUP.md).
+
+### IGCSE exam simulator (study agent pipeline)
+
+Windows setup for [igcse-study-agent](https://github.com/deepakp1308/igcse-study-agent) (past papers → practice PDFs → static simulator):
+
+- Full guide: [docs/IGCSE_STUDY_AGENT_WINDOWS.md](docs/IGCSE_STUDY_AGENT_WINDOWS.md)
+- One-shot bootstrap: `.\scripts\windows\setup-igcse-study-agent.ps1`
+- App env (`frontend/smartshelf/.env`): `EXPO_PUBLIC_IGCSE_SIMULATOR_BASE_URL`, optional `EXPO_PUBLIC_IGCSE_SIMULATOR_DEFAULT_SET`
+
 To stop:
 
 ```bash

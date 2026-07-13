@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 import { getDevApiBaseUrl } from '@/src/lib/devApiBaseUrl';
 import { universalStorage } from '@/src/lib/universalStorage';
 
@@ -5,15 +7,53 @@ import { universalStorage } from '@/src/lib/universalStorage';
 // Override anytime: EXPO_PUBLIC_API_BASE_URL=https://your-tunnel.ngrok-free.dev/api
 // Physical device fallback if Expo host is missing: EXPO_PUBLIC_DEV_API_HOST=192.168.1.5
 // Optional port: EXPO_PUBLIC_DEV_API_PORT=8000
-export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL ||
-  (__DEV__ ? getDevApiBaseUrl() : 'https://your-production-api.com/api');
+/** Browser web dev: use localhost instead of a LAN IP from .env. */
+function resolveApiBaseUrl(): string {
+  const configured = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
+  if (configured) {
+    if (Platform.OS === 'web' && /^http:\/\/192\.168\.\d+\.\d+(:\d+)?/i.test(configured)) {
+      return configured.replace(/^http:\/\/192\.168\.\d+\.\d+/, 'http://localhost');
+    }
+    return configured;
+  }
+  if (__DEV__) {
+    return getDevApiBaseUrl();
+  }
+  return 'https://your-production-api.com/api';
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
 
 /** ngrok free tier: skip interstitial for programmatic requests */
 export const getApiExtraHeaders = (): Record<string, string> =>
   API_BASE_URL.includes('ngrok') ? { 'ngrok-skip-browser-warning': 'true' } : {};
 
 const REQUEST_TIMEOUT_MS = 10000;
+
+/** Optional per-request timeout (ms). Practice / cold Render hosts need longer. */
+export type ApiRequestOptions = RequestInit & {
+  timeoutMs?: number;
+};
+
+function isNetworkFailure(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const name = (error as Error).name ?? '';
+  const message = (error as Error).message ?? '';
+  return (
+    name === 'AbortError' ||
+    /network request timed out/i.test(message) ||
+    /failed to fetch/i.test(message) ||
+    /network error/i.test(message)
+  );
+}
+
+function networkFailureMessage(): string {
+  return (
+    `Cannot reach SmartShelf at ${API_BASE_URL}. ` +
+    'Ensure Docker is running (smartshelf-backend container) and your device is on the same Wi‑Fi, ' +
+    'or set EXPO_PUBLIC_API_BASE_URL to your ngrok URL in frontend/smartshelf/.env.'
+  );
+}
 
 /** Backend base URL (without /api) - used for PDF proxy */
 export const getBackendBaseUrl = (): string => {
@@ -49,6 +89,10 @@ export type RegisterPayload = {
   staff_department?: string;
   company_name?: string;
   contact_email?: string;
+  /** Required by backend — must be true to create an account. */
+  terms_accepted?: boolean;
+  /** Optional analytics opt-in. */
+  analytics_consent?: boolean;
 };
 
 export type UserProfile = {
@@ -63,6 +107,15 @@ export type UserProfile = {
   staff_role?: string;
   staff_department?: string;
   managed_student_ids?: string[];
+  // Phase 1 compliance fields
+  terms_accepted_at?: string | null;
+  terms_version?: string;
+  privacy_accepted_at?: string | null;
+  privacy_version?: string;
+  analytics_consent?: boolean;
+  analytics_consent_at?: string | null;
+  // Phase 2 school governance
+  school_managed?: boolean;
 };
 
 let sessionToken: string | null = null;
@@ -222,10 +275,11 @@ export const hasValidToken = async (): Promise<boolean> => {
  */
 export const apiRequest = async (
   endpoint: string,
-  options: RequestInit = {}
+  options: ApiRequestOptions = {}
 ): Promise<Response> => {
+  const { timeoutMs = REQUEST_TIMEOUT_MS, ...fetchOptions } = options;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const token = await getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -242,9 +296,9 @@ export const apiRequest = async (
 
   try {
     const response = await fetch(url, {
-      ...options,
+      ...fetchOptions,
       headers,
-      signal: options.signal ?? controller.signal,
+      signal: fetchOptions.signal ?? controller.signal,
     });
     return response;
   } finally {
@@ -294,7 +348,17 @@ export const login = async (
 
     if (!response.ok) {
       console.error('[API] Login failed:', data);
-      throw new Error(data.error || 'Login failed');
+      if (data.error === 'account_locked') {
+        // Attach the structured lockout info so callers can render a specific UI.
+        const err = new Error(data.message || 'Account temporarily locked.') as Error & {
+          code: string;
+          locked_until: string | null;
+        };
+        err.code = 'account_locked';
+        err.locked_until = data.locked_until ?? null;
+        throw err;
+      }
+      throw new Error(data.error || data.message || 'Login failed');
     }
 
     console.log('[API] Login successful, token received');
@@ -307,6 +371,9 @@ export const login = async (
     return data;
   } catch (error) {
     console.error('[API] Login error:', error);
+    if (isNetworkFailure(error)) {
+      throw new Error(networkFailureMessage());
+    }
     throw error;
   }
 };
@@ -395,6 +462,10 @@ export const register = async (
 
   const dob = payload.date_of_birth?.trim();
   body.date_of_birth = dob && dob.length > 0 ? dob : null;
+
+  // Consent — always send; backend requires terms_accepted=true.
+  body.terms_accepted = payload.terms_accepted !== false;
+  body.analytics_consent = payload.analytics_consent ?? false;
 
   if (role === 'publisher') {
     body.company_name = payload.company_name?.trim() ?? '';

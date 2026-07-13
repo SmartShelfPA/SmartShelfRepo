@@ -3,7 +3,7 @@ import { Redirect } from 'expo-router';
 import { useAuthStore } from '@/src/store/auth';
 
 /**
- * App entry: signed-in users → home; everyone else → who's using SmartShelf.
+ * App entry: signed-in users → home; everyone else → student sign up.
  */
 export default function Index() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -13,5 +13,5 @@ export default function Index() {
     return <Redirect href={getHomeRoute()} />;
   }
 
-  return <Redirect href="/account-select" />;
+  return <Redirect href="/register" />;
 }

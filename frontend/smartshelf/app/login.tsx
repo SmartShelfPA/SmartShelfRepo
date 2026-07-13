@@ -20,6 +20,8 @@ import { ThemedTextInput } from '@/components/themed-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getStayLoggedInPreference } from '@/services/api';
 import { useAuthStore } from '@/src/store/auth';
+import { GoogleSignInButton } from '@/components/google-sign-in-button';
+import { useGoogleSignIn } from '@/src/hooks/useGoogleSignIn';
 
 export default function LoginScreen() {
   const [username, setUsername] = useState('');
@@ -27,6 +29,9 @@ export default function LoginScreen() {
   const [stayLoggedIn, setStayLoggedIn] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isLocked, setIsLocked] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const { signInWithGoogle, isConfigured: googleConfigured } = useGoogleSignIn();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const signIn = useAuthStore((s) => s.signIn);
@@ -53,13 +58,19 @@ export default function LoginScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     if (!username.trim() || !password.trim()) return;
     setError(null);
+    setIsLocked(false);
     setIsLoading(true);
     try {
       await signIn(username.trim(), password, { stayLoggedIn });
       router.replace(getHomeRoute());
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Sign in failed';
-      setError(message);
+      const err = e as Error & { code?: string };
+      if (err.code === 'account_locked') {
+        setIsLocked(true);
+        setError(err.message);
+      } else {
+        setError(e instanceof Error ? e.message : 'Sign in failed');
+      }
       console.error('[Login] Sign in failed:', e);
     } finally {
       setIsLoading(false);
@@ -69,6 +80,23 @@ export default function LoginScreen() {
   const handleSignUp = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     router.push('/register');
+  };
+
+  const handleGoogleSignIn = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    setError(null);
+    setIsLocked(false);
+    setGoogleLoading(true);
+    try {
+      const result = await signInWithGoogle();
+      if (result.success) {
+        router.replace(getHomeRoute());
+      } else if (result.code !== 'cancelled') {
+        setError(result.error);
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
   };
 
   return (
@@ -131,7 +159,18 @@ export default function LoginScreen() {
               disabled={isLoading}>
               <ThemedText style={styles.forgotPasswordText}>Forgot password?</ThemedText>
             </TouchableOpacity>
-            {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+            {isLocked && error ? (
+              <View style={styles.lockoutBanner}>
+                <ThemedText style={styles.lockoutTitle}>Account temporarily locked</ThemedText>
+                <ThemedText style={styles.lockoutBody}>{error}</ThemedText>
+                <ThemedText style={styles.lockoutHint}>
+                  Too many incorrect password attempts. Please wait and try again, or use
+                  "Forgot password?" to reset your credentials.
+                </ThemedText>
+              </View>
+            ) : error ? (
+              <ThemedText style={styles.errorText}>{error}</ThemedText>
+            ) : null}
             <TouchableOpacity
               style={[styles.button, { backgroundColor: buttonBgColor }]}
               onPress={handleSignIn}
@@ -142,12 +181,18 @@ export default function LoginScreen() {
               </ThemedText>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.backLink}
-              onPress={() => router.replace('/account-select')}
-              disabled={isLoading}>
-              <ThemedText style={styles.forgotPasswordText}>← Change who's using SmartShelf</ThemedText>
-            </TouchableOpacity>
+            <View style={styles.dividerRow}>
+              <View style={[styles.dividerLine, { backgroundColor: mutedColor }]} />
+              <ThemedText style={[styles.dividerText, { color: mutedColor }]}>or</ThemedText>
+              <View style={[styles.dividerLine, { backgroundColor: mutedColor }]} />
+            </View>
+
+            <GoogleSignInButton
+              onPress={handleGoogleSignIn}
+              isLoading={googleLoading}
+              disabled={isLoading}
+              isConfigured={googleConfigured}
+            />
 
             <TouchableOpacity style={styles.registerButton} onPress={handleSignUp}>
               <ThemedText style={styles.registerButtonText}>
@@ -156,6 +201,16 @@ export default function LoginScreen() {
                   Sign Up
                 </ThemedText>
               </ThemedText>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => router.push('/teacher-sign-in')} style={styles.backLink}>
+              <ThemedText style={styles.forgotPasswordText}>Teacher Access</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/register-parent' as never)} style={styles.backLink}>
+              <ThemedText style={styles.forgotPasswordText}>Parent Access (invite code)</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/parent-sign-in' as never)} style={styles.backLink}>
+              <ThemedText style={styles.forgotPasswordText}>Parent sign-in</ThemedText>
             </TouchableOpacity>
           </ThemedView>
         </ThemedView>
@@ -181,13 +236,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoContainer: {
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    overflow: 'hidden',
+    width: 200,
+    height: 120,
     marginBottom: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  logo: { width: 140, height: 140 },
+  logo: { width: 200, height: 120 },
   title: { marginBottom: 8, textAlign: 'center' },
   subtitle: { fontSize: 16, textAlign: 'center', opacity: 0.7 },
   form: { gap: 20 },
@@ -217,4 +272,23 @@ const styles = StyleSheet.create({
   forgotPasswordButton: { alignSelf: 'flex-end', marginTop: -8 },
   forgotPasswordText: { fontSize: 13, opacity: 0.8 },
   errorText: { color: '#ff4444', fontSize: 13 },
+  lockoutBanner: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cc4400',
+    backgroundColor: 'rgba(204,68,0,0.10)',
+    padding: 14,
+    gap: 6,
+  },
+  lockoutTitle: { fontSize: 13, fontWeight: '700', color: '#cc4400' },
+  lockoutBody: { fontSize: 13, color: '#cc4400' },
+  lockoutHint: { fontSize: 12, opacity: 0.75 },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 4,
+  },
+  dividerLine: { flex: 1, height: StyleSheet.hairlineWidth, opacity: 0.4 },
+  dividerText: { fontSize: 13, opacity: 0.6 },
 });

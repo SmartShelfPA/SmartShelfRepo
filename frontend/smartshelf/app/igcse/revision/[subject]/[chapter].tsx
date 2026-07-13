@@ -12,6 +12,7 @@ import {
 } from '@/src/components/igcse';
 import { useIgcsChapterSet, useIgcsScreenTheme } from '@/src/hooks/igcse';
 import { openIgcsPdf, openIgcsSimulator, resolveMediaUrl } from '@/src/api/igcseNavigation';
+import { buildIgcsSimulatorUrl } from '@/src/lib/igcseSimulatorUrl';
 
 function formatGeneratedAt(iso: string): string {
   if (!iso) return '';
@@ -47,7 +48,13 @@ export default function IgcsChapterDetailScreen() {
   const solutionsUrl = resolveMediaUrl(
     set?.worked_solutions?.url ?? set?.worked_solutions_url ?? ''
   );
-  const simulatorUrl = (set?.simulator?.public_url ?? set?.simulator_public_url ?? '').trim();
+  const simulatorSetId = (
+    set?.simulator?.simulator_set_id ?? set?.simulator_set_id ?? ''
+  ).trim();
+  const simulatorUrl = buildIgcsSimulatorUrl(
+    simulatorSetId,
+    set?.simulator?.public_url ?? set?.simulator_public_url
+  ).trim();
 
   const chapterTitle = set?.chapter_title || chapter.replace(/_/g, ' ');
 
@@ -158,7 +165,7 @@ export default function IgcsChapterDetailScreen() {
               openIgcsSimulator(router, {
                 url: simulatorUrl,
                 title: `${chapterTitle} — Simulator`,
-                setId: set.id,
+                setId: simulatorSetId || set.id,
               })
             }
             textColor={theme.textColor}

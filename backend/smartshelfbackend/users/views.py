@@ -1,15 +1,17 @@
 from django.db.models import Q
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Book, PublisherProfile, ReadingProgress, UserProfile
+from .models import AuditLog, Book, DataRequest, PublisherProfile, ReadingProgress, UserProfile
 from .permissions import IsPublisherRole, IsStaffRole
 from .serializers import (
     BookSerializer,
     BookshelfSerializer,
+    DataRequestSerializer,
     PublisherBookUploadSerializer,
     PublisherProfileSerializer,
     ReadingProgressInlineSerializer,
@@ -145,4 +147,73 @@ class PublisherCatalogView(generics.ListAPIView):
             Book.objects.filter(publisher=self.request.user)
             .prefetch_related("category")
             .order_by("-id")
+        )
+
+
+class DataRequestView(APIView):
+    """
+    POST  /api/v1/privacy/data-request/   — submit a data rights request
+    GET   /api/v1/privacy/data-request/   — list the authenticated user's requests
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        qs = DataRequest.objects.filter(user=request.user)
+        return Response(DataRequestSerializer(qs, many=True).data)
+
+    def post(self, request):
+        serializer = DataRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        req = serializer.save(user=request.user)
+        AuditLog.log(
+            AuditLog.Action.ACCOUNT_DELETE_REQUEST
+            if req.request_type == DataRequest.RequestType.DELETE
+            else AuditLog.Action.DATA_EXPORT
+            if req.request_type == DataRequest.RequestType.EXPORT
+            else AuditLog.Action.ADMIN_ACTION,
+            actor=request.user,
+            target=request.user,
+            notes=f"Data request submitted: {req.get_request_type_display()}",
+        )
+        return Response(DataRequestSerializer(req).data, status=status.HTTP_201_CREATED)
+
+
+class ConsentUpdateView(APIView):
+    """
+    PATCH /api/v1/privacy/consent/  — update optional analytics/marketing consent.
+    Required consent (terms + privacy) cannot be withdrawn here; submit a
+    DELETE data request instead.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request):
+        user = request.user
+        analytics = request.data.get("analytics_consent")
+        if analytics is None:
+            return Response(
+                {"error": "Provide analytics_consent (true/false)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not isinstance(analytics, bool):
+            return Response(
+                {"error": "analytics_consent must be a boolean."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        prev = user.analytics_consent
+        user.analytics_consent = analytics
+        user.analytics_consent_at = timezone.now()
+        user.save(update_fields=["analytics_consent", "analytics_consent_at"])
+        AuditLog.log(
+            AuditLog.Action.CONSENT_CHANGE,
+            actor=user,
+            target=user,
+            notes=f"analytics_consent changed from {prev} to {analytics}.",
+        )
+        return Response(
+            {
+                "analytics_consent": user.analytics_consent,
+                "analytics_consent_at": user.analytics_consent_at,
+            }
         )

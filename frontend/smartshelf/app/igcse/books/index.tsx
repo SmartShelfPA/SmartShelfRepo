@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { Alert, FlatList, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Href } from 'expo-router';
 import { useRouter } from 'expo-router';
@@ -10,40 +10,110 @@ import {
   IgcseEmptyState,
   IgcseErrorState,
   IgcseListSkeleton,
-  IgcseTextbookCard,
+  ProtectedPdfCard,
 } from '@/src/components/igcse';
 import { useIgcsScreenTheme } from '@/src/hooks/igcse';
-import { useIgcsShelf } from '@/src/hooks/useIgcsShelf';
-import type { IgcsTextbook } from '@/src/types/igcse';
+import { useProtectedPdfs } from '@/src/hooks/useProtectedPdfs';
+import { useProtectedPdfDownload } from '@/src/hooks/useProtectedPdfDownload';
+import type { ProtectedPdfAsset } from '@/src/api/protectedPdfs';
+import { CollectionPickerModal } from '@/src/components/CollectionPickerModal';
+import { ensureIgcsBookInStore, igcseBookId } from '@/src/lib/igcseBook';
 
-/**
- * EPUB textbook grid — data from `GET /api/v1/igcse/books/` (Django `learning` app).
- */
-export default function IgcsEpubBooksScreen() {
+function ProtectedBookItem({
+  asset,
+  theme,
+  onOpen,
+}: {
+  asset: ProtectedPdfAsset;
+  theme: ReturnType<typeof useIgcsScreenTheme>;
+  onOpen: (asset: ProtectedPdfAsset, localUri: string) => void;
+}) {
+  const { status, error, download, remove, prepareOpen } = useProtectedPdfDownload(asset);
+  const [pickerVisible, setPickerVisible] = useState(false);
+
+  const handlePrimary = useCallback(async () => {
+    if (status === 'done' || status === 'expired') {
+      const result = await prepareOpen();
+      if (result.ok) {
+        onOpen(asset, result.localUri);
+      } else if (result.reason === 'stale') {
+        Alert.alert('Update available', result.message, [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Download', onPress: () => void download() },
+        ]);
+      } else if (result.reason === 'not_downloaded') {
+        void download();
+      } else {
+        Alert.alert('Cannot open', result.message);
+      }
+      return;
+    }
+    void download();
+  }, [status, prepareOpen, onOpen, asset, download]);
+
+  const handleRemove = useCallback(() => {
+    Alert.alert('Remove offline copy?', `"${asset.title}" will be deleted from this device.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => void remove() },
+    ]);
+  }, [asset.title, remove]);
+
+  const handleAddToCollection = useCallback(() => {
+    ensureIgcsBookInStore(asset);
+    setPickerVisible(true);
+  }, [asset]);
+
+  return (
+    <>
+      <ProtectedPdfCard
+        asset={asset}
+        status={status}
+        error={error}
+        onPrimary={handlePrimary}
+        onDownload={() => void download()}
+        onRemove={handleRemove}
+        onAddToCollection={handleAddToCollection}
+        textColor={theme.textColor}
+        mutedColor={theme.mutedTextColor}
+        tintColor={theme.tintColor}
+        cardBg={theme.cardBgColor}
+        tagBg={theme.borderColor}
+      />
+      <CollectionPickerModal
+        visible={pickerVisible}
+        onClose={() => setPickerVisible(false)}
+        bookIds={[igcseBookId(asset.id)]}
+        cardBg={theme.cardBgColor}
+        tagBg={theme.borderColor}
+        textColor={theme.textColor}
+        mutedColor={theme.mutedTextColor}
+        tintColor={theme.tintColor}
+      />
+    </>
+  );
+}
+
+export default function IgcseTextbooksScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const theme = useIgcsScreenTheme();
-  const { books, isLoading, error, refetch, empty } = useIgcsShelf();
+  const { assets, isLoading, error, refetch, empty } = useProtectedPdfs();
 
-  const sorted = useMemo(
-    () =>
-      [...books].sort((a, b) =>
-        (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' })
-      ),
-    [books]
+  const handleOpen = useCallback(
+    (asset: ProtectedPdfAsset, localUri: string) => {
+      router.push({
+        pathname: '/igcse/pdf-reader',
+        params: { localUri, bookId: asset.id, title: asset.title },
+      } as unknown as Href);
+    },
+    [router]
   );
 
-  const renderItem = ({ item }: { item: IgcsTextbook }) => (
-    <IgcseTextbookCard
-      book={item}
-      textColor={theme.textColor}
-      mutedColor={theme.mutedTextColor}
-      tintColor={theme.tintColor}
-      cardBg={theme.cardBgColor}
-      tagBg={theme.borderColor}
-      onOpen={() => router.push({ pathname: '/igcse/reader/[id]', params: { id: item.id } } as Href)}
-      onDetails={() => router.push({ pathname: '/igcse/book/[id]', params: { id: item.id } } as Href)}
-    />
+  const renderItem = useCallback(
+    ({ item }: { item: ProtectedPdfAsset }) => (
+      <ProtectedBookItem asset={item} theme={theme} onOpen={handleOpen} />
+    ),
+    [theme, handleOpen]
   );
 
   return (
@@ -57,17 +127,21 @@ export default function IgcsEpubBooksScreen() {
           <MaterialIcons name="arrow-back" size={24} color={theme.tintColor} />
         </TouchableOpacity>
         <ThemedText type="title">IGCSE textbooks</ThemedText>
-        <TouchableOpacity onPress={() => void refetch()} style={styles.iconBtn} activeOpacity={0.8}>
-          <MaterialIcons name="refresh" size={22} color={theme.tintColor} />
+        <TouchableOpacity
+          onPress={() => router.push('/downloads' as Href)}
+          style={styles.iconBtn}
+          activeOpacity={0.8}
+          accessibilityLabel="My downloads">
+          <MaterialIcons name="download-done" size={22} color={theme.tintColor} />
         </TouchableOpacity>
       </View>
       <ThemedText style={[styles.subtitle, { color: theme.mutedTextColor }]}>
-        Served from SmartShelf · tap to read, info for synopsis
+        Protected resources · download to read offline inside SmartShelf
       </ThemedText>
 
       {isLoading ? (
         <IgcseListSkeleton
-          message="Loading textbooks…"
+          message="Loading resources…"
           tintColor={theme.tintColor}
           mutedColor={theme.mutedTextColor}
         />
@@ -80,9 +154,9 @@ export default function IgcsEpubBooksScreen() {
         />
       ) : empty ? (
         <IgcseEmptyState
-          icon="menu-book"
-          title="No textbooks yet"
-          message="Ask your admin to add EPUB titles in Django admin (Learning → IGCSE EPUB books)."
+          icon="picture-as-pdf"
+          title="No resources yet"
+          message="Protected IGCSE PDFs published by your admin will appear here."
           actionLabel="Refresh"
           onAction={() => void refetch()}
           mutedColor={theme.mutedTextColor}
@@ -90,11 +164,9 @@ export default function IgcsEpubBooksScreen() {
         />
       ) : (
         <FlatList
-          data={sorted}
-          keyExtractor={(b) => b.id}
+          data={assets}
+          keyExtractor={(a) => a.id}
           renderItem={renderItem}
-          numColumns={2}
-          columnWrapperStyle={styles.row}
           contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 24 }]}
         />
       )}
@@ -115,5 +187,4 @@ const styles = StyleSheet.create({
   iconBtn: { padding: 6 },
   subtitle: { paddingHorizontal: 16, marginTop: 8, marginBottom: 12, fontSize: 14 },
   list: { paddingHorizontal: 16, gap: 12 },
-  row: { justifyContent: 'space-between', gap: 12 },
 });

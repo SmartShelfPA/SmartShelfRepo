@@ -45,6 +45,27 @@ export async function getIGCSEBookDetail(bookId: string): Promise<IgcsTextbook |
   return fetchIgcsTextbookById(bookId);
 }
 
+export type LoadIgcsBookResult =
+  | { ok: true; book: IgcsTextbook }
+  | { ok: false; error: string };
+
+/** Loads book metadata for reader/detail screens; never leaves a hanging promise. */
+export async function loadIgcsBookDetailSafe(bookId: string): Promise<LoadIgcsBookResult> {
+  try {
+    const book = await getIGCSEBookDetail(bookId);
+    if (!book) {
+      return { ok: false, error: 'This book could not be loaded. Check your connection or try again.' };
+    }
+    if (!book.epubUrl?.trim()) {
+      return { ok: false, error: 'No file is linked for this title yet.' };
+    }
+    return { ok: true, book };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Failed to load textbook';
+    return { ok: false, error: msg };
+  }
+}
+
 export async function saveReadingProgress(payload: ReaderProgressPayload): Promise<boolean> {
   return syncIgcsReaderProgress(payload);
 }

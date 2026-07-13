@@ -13,6 +13,7 @@ export default function IgcsLayout() {
       <Stack.Screen name="simulator" />
       <Stack.Screen name="book/[id]" />
       <Stack.Screen name="reader/[id]" />
+      <Stack.Screen name="pdf-reader" />
     </Stack>
   );
 }
