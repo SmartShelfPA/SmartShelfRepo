@@ -194,7 +194,9 @@ dist/
 # Mobile release binaries (do not commit — use build-artifacts/ locally)
 build-artifacts/
 *.aab
+*.apk
 *.apks
+store-assets/tablet-screenshots/*.apk
 
 # Misc
 *.orig
