@@ -118,10 +118,6 @@ services:
       ALOC_API_BASE_URL: ${ALOC_API_BASE_URL:-http://aloc:8000/api/v2}
       ALOC_ACCESS_TOKEN: ${ALOC_ACCESS_TOKEN:-smartshelf-dev-token}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      GOOGLE_CLIENT_ID_WEB: ${GOOGLE_CLIENT_ID_WEB:-}
-      GOOGLE_CLIENT_ID_IOS: ${GOOGLE_CLIENT_ID_IOS:-}
-      GOOGLE_CLIENT_ID_ANDROID: ${GOOGLE_CLIENT_ID_ANDROID:-}
-      GOOGLE_CLIENT_SECRET_WEB: ${GOOGLE_CLIENT_SECRET_WEB:-}
       BUNDLED_IGCSE_EPUB_DIR: /app/bundled-igcse/epubs
       BUNDLED_IGCSE_MANIFEST: /app/bundled-igcse/manifest.json
     ports:

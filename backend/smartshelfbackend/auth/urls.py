@@ -16,5 +16,4 @@ urlpatterns = [
     path("password-reset/request/", views.PasswordResetRequestView.as_view(), name="password-reset-request"),
     path("password-reset/confirm/", views.PasswordResetConfirmView.as_view(), name="password-reset-confirm"),
     path("policy-info/", views.PolicyInfoView.as_view(), name="policy-info"),
-    path("google/", views.GoogleSignInView.as_view(), name="google-signin"),
 ]

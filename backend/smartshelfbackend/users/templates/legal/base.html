@@ -17,11 +17,11 @@
 </head>
 <body>
   <h1>{% block page_title %}{% endblock %}</h1>
-  <p class="meta">Last updated: June 2024 · Version 2024-06</p>
+  <p class="meta">{% block meta %}Last updated: June 2024 · Version 2024-06{% endblock %}</p>
   {% block content %}{% endblock %}
   <footer>
-    SmartShelf Technologies ·
-    <a href="mailto:privacy@smartshelf.ng">privacy@smartshelf.ng</a> ·
+    SmartShelf ·
+    <a href="mailto:info@smartshelflearn.com">info@smartshelflearn.com</a> ·
     <a href="/privacy/">Privacy</a> ·
     <a href="/terms/">Terms</a>
   </footer>

@@ -20,8 +20,6 @@ import { ThemedTextInput } from '@/components/themed-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getStayLoggedInPreference } from '@/services/api';
 import { useAuthStore } from '@/src/store/auth';
-import { GoogleSignInButton } from '@/components/google-sign-in-button';
-import { useGoogleSignIn } from '@/src/hooks/useGoogleSignIn';
 
 export default function LoginScreen() {
   const [username, setUsername] = useState('');
@@ -30,8 +28,6 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLocked, setIsLocked] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const { signInWithGoogle, isConfigured: googleConfigured } = useGoogleSignIn();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const signIn = useAuthStore((s) => s.signIn);
@@ -56,7 +52,11 @@ export default function LoginScreen() {
 
   const handleSignIn = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-    if (!username.trim() || !password.trim()) return;
+    if (!username.trim() || !password.trim()) {
+      setIsLocked(false);
+      setError('Please enter your username and password.');
+      return;
+    }
     setError(null);
     setIsLocked(false);
     setIsLoading(true);
@@ -80,23 +80,6 @@ export default function LoginScreen() {
   const handleSignUp = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     router.push('/register');
-  };
-
-  const handleGoogleSignIn = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-    setError(null);
-    setIsLocked(false);
-    setGoogleLoading(true);
-    try {
-      const result = await signInWithGoogle();
-      if (result.success) {
-        router.replace(getHomeRoute());
-      } else if (result.code !== 'cancelled') {
-        setError(result.error);
-      }
-    } finally {
-      setGoogleLoading(false);
-    }
   };
 
   return (
@@ -180,19 +163,6 @@ export default function LoginScreen() {
                 {isLoading ? 'Signing In...' : 'Sign In'}
               </ThemedText>
             </TouchableOpacity>
-
-            <View style={styles.dividerRow}>
-              <View style={[styles.dividerLine, { backgroundColor: mutedColor }]} />
-              <ThemedText style={[styles.dividerText, { color: mutedColor }]}>or</ThemedText>
-              <View style={[styles.dividerLine, { backgroundColor: mutedColor }]} />
-            </View>
-
-            <GoogleSignInButton
-              onPress={handleGoogleSignIn}
-              isLoading={googleLoading}
-              disabled={isLoading}
-              isConfigured={googleConfigured}
-            />
 
             <TouchableOpacity style={styles.registerButton} onPress={handleSignUp}>
               <ThemedText style={styles.registerButtonText}>
@@ -283,12 +253,4 @@ const styles = StyleSheet.create({
   lockoutTitle: { fontSize: 13, fontWeight: '700', color: '#cc4400' },
   lockoutBody: { fontSize: 13, color: '#cc4400' },
   lockoutHint: { fontSize: 12, opacity: 0.75 },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 4,
-  },
-  dividerLine: { flex: 1, height: StyleSheet.hairlineWidth, opacity: 0.4 },
-  dividerText: { fontSize: 13, opacity: 0.6 },
 });

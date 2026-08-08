@@ -17,12 +17,6 @@ import string
 from users.models import AuditLog, Organization, ParentalConsent, PublisherProfile, UserProfile
 from users.serializers import OrganizationSerializer, UserProfileSerializer
 from .throttles import LoginRateThrottle, PasswordResetRateThrottle, RegisterRateThrottle
-from .google_auth import (
-    GoogleAuthError,
-    exchange_code_for_id_token,
-    get_or_create_google_user,
-    verify_google_id_token,
-)
 
 RESET_CODE_TTL_SECONDS = 15 * 60
 RESET_CODE_MAX_ATTEMPTS = 5
@@ -39,7 +33,7 @@ def _generate_reset_code() -> str:
 
 # Version tags embedded in the app / backend — bump these when policy text changes.
 CURRENT_TERMS_VERSION = "2024-06"
-CURRENT_PRIVACY_VERSION = "2024-06"
+CURRENT_PRIVACY_VERSION = "2026-08"
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -476,81 +470,3 @@ class PolicyInfoView(APIView):
             "data_storage_region": getattr(settings, "DATA_STORAGE_REGION", "West Africa"),
             "jurisdictions": jurisdictions,
         })
-
-
-class GoogleSignInView(APIView):
-    """
-    POST /api/v1/auth/google/
-
-    Body: { "id_token": "<Google JWT>", "platform": "ios|android|web" }
-
-    Verifies the Google id_token, creates or retrieves the matching SmartShelf
-    account, and returns a DRF token just like the regular login endpoint.
-
-    Requires GOOGLE_CLIENT_ID_IOS / _ANDROID / _WEB env vars — see
-    auth/google_auth.py for full setup instructions.
-    """
-
-    authentication_classes = []
-    permission_classes = []
-    throttle_classes = [LoginRateThrottle]
-
-    def post(self, request):
-        code = request.data.get("code", "").strip()
-        redirect_uri = request.data.get("redirect_uri", "").strip()
-
-        if not code:
-            return Response(
-                {"error": "code is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if not redirect_uri:
-            return Response(
-                {"error": "redirect_uri is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            # Exchange the authorization code for an id_token using the client secret.
-            id_token_str = exchange_code_for_id_token(code, redirect_uri)
-            claims = verify_google_id_token(id_token_str)
-            user, created = get_or_create_google_user(claims)
-        except GoogleAuthError as exc:
-            return Response(
-                {"error": str(exc)},
-                status=status.HTTP_401_UNAUTHORIZED,
-            )
-        except Exception as exc:
-            logger.exception("Unexpected error during Google sign-in")
-            return Response(
-                {"error": "Authentication failed. Please try again."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-
-        # Ensure the account is active.
-        if not user.is_active:
-            return Response(
-                {"error": "This account has been deactivated. Contact support."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        user.clear_failed_logins()
-        token, _ = Token.objects.get_or_create(user=user)
-
-        AuditLog.log(
-            AuditLog.Action.POLICY_ACCEPT if created else AuditLog.Action.ADMIN_ACTION,
-            actor=user,
-            target=user,
-            notes=f"Google Sign-In {'account created' if created else 'login'} via platform={request.data.get('platform', 'unknown')}.",
-        )
-
-        return Response(
-            {
-                "success": True,
-                "message": "Signed in with Google.",
-                "token": token.key,
-                "user": UserProfileSerializer(user).data,
-                "created": created,
-            },
-            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
-        )

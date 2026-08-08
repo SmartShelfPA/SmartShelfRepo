@@ -243,7 +243,7 @@ PRACTICE_YEARS_JSON = os.getenv('PRACTICE_YEARS_JSON', '')
 # privacy disclosures served to users.
 DATA_STORAGE_COUNTRY = os.getenv('DATA_STORAGE_COUNTRY', 'Nigeria')
 DATA_STORAGE_REGION = os.getenv('DATA_STORAGE_REGION', 'West Africa')
-PRIVACY_CONTACT_EMAIL = os.getenv('PRIVACY_CONTACT_EMAIL', 'privacy@smartshelf.ng')
+PRIVACY_CONTACT_EMAIL = os.getenv('PRIVACY_CONTACT_EMAIL', 'info@smartshelflearn.com')
 # Jurisdiction flags — set to 'true' to enable jurisdiction-specific disclosures.
 COMPLIANCE_NDPA = os.getenv('COMPLIANCE_NDPA', 'true').lower() == 'true'   # Nigeria NDPA
 COMPLIANCE_COPPA = os.getenv('COMPLIANCE_COPPA', 'true').lower() == 'true'  # US COPPA
