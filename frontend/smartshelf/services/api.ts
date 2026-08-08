@@ -19,7 +19,8 @@ function resolveApiBaseUrl(): string {
   if (__DEV__) {
     return getDevApiBaseUrl();
   }
-  return 'https://your-production-api.com/api';
+  // Production fallback — keep in sync with EAS production secret EXPO_PUBLIC_API_BASE_URL.
+  return 'https://smartshelf-api.onrender.com/api';
 }
 
 export const API_BASE_URL = resolveApiBaseUrl();
@@ -28,7 +29,38 @@ export const API_BASE_URL = resolveApiBaseUrl();
 export const getApiExtraHeaders = (): Record<string, string> =>
   API_BASE_URL.includes('ngrok') ? { 'ngrok-skip-browser-warning': 'true' } : {};
 
-const REQUEST_TIMEOUT_MS = 10000;
+const REQUEST_TIMEOUT_MS = 15000;
+const AUTH_REQUEST_TIMEOUT_MS = 30000;
+
+/**
+ * Parse an API response as JSON. Render/HTML 502 pages start with "<" and previously
+ * surfaced as cryptic "JSON Parse error: Unexpected character: <" in the app.
+ */
+async function parseJsonResponse(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!text) {
+    if (!response.ok) {
+      throw new Error(`Server error (${response.status}). Please try again.`);
+    }
+    return null;
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    if (response.status >= 500 || text.trimStart().startsWith('<')) {
+      throw new Error(
+        'SmartShelf servers are temporarily unavailable. Please try again in a minute.'
+      );
+    }
+    throw new Error(`Unexpected server response (${response.status}). Please try again.`);
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
 
 /** Optional per-request timeout (ms). Practice / cold Render hosts need longer. */
 export type ApiRequestOptions = RequestInit & {
@@ -50,8 +82,8 @@ function isNetworkFailure(error: unknown): boolean {
 function networkFailureMessage(): string {
   return (
     `Cannot reach SmartShelf at ${API_BASE_URL}. ` +
-    'Ensure Docker is running (smartshelf-backend container) and your device is on the same Wi‑Fi, ' +
-    'or set EXPO_PUBLIC_API_BASE_URL to your ngrok URL in frontend/smartshelf/.env.'
+    'Please check your internet connection and try again. ' +
+    'If this continues, the server may be restarting — wait a minute and retry.'
   );
 }
 
@@ -341,33 +373,45 @@ export const login = async (
     const response = await apiRequest('/auth/login/', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
+      timeoutMs: AUTH_REQUEST_TIMEOUT_MS,
     });
 
-    const data = await response.json();
+    const data = asRecord(await parseJsonResponse(response));
     console.log('[API] Login response status:', response.status);
 
     if (!response.ok) {
       console.error('[API] Login failed:', data);
       if (data.error === 'account_locked') {
         // Attach the structured lockout info so callers can render a specific UI.
-        const err = new Error(data.message || 'Account temporarily locked.') as Error & {
+        const err = new Error(
+          (typeof data.message === 'string' && data.message) || 'Account temporarily locked.'
+        ) as Error & {
           code: string;
           locked_until: string | null;
         };
         err.code = 'account_locked';
-        err.locked_until = data.locked_until ?? null;
+        err.locked_until =
+          typeof data.locked_until === 'string' ? data.locked_until : null;
         throw err;
       }
-      throw new Error(data.error || data.message || 'Login failed');
+      const message =
+        (typeof data.error === 'string' && data.error) ||
+        (typeof data.message === 'string' && data.message) ||
+        'Login failed';
+      throw new Error(message);
     }
 
     console.log('[API] Login successful, token received');
     const persist = options?.persist !== false;
-    await setToken(data.token, { persist });
-    if (data.user) {
-      await setStoredProfile(data.user, { persist });
+    const token = typeof data.token === 'string' ? data.token : null;
+    if (!token) {
+      throw new Error('Login succeeded but no token was returned.');
     }
-    
+    await setToken(token, { persist });
+    if (data.user && typeof data.user === 'object') {
+      await setStoredProfile(data.user as UserProfile, { persist });
+    }
+
     return data;
   } catch (error) {
     console.error('[API] Login error:', error);
@@ -425,8 +469,9 @@ export const fetchOrganizations = async (): Promise<SchoolOrganization[]> => {
 
   let data: unknown;
   try {
-    data = await response.json();
-  } catch {
+    data = await parseJsonResponse(response);
+  } catch (e) {
+    if (e instanceof Error) throw e;
     throw new Error('Could not load schools (invalid response).');
   }
   if (!response.ok) {
@@ -482,9 +527,10 @@ export const register = async (
     const response = await apiRequest('/auth/register/', {
       method: 'POST',
       body: JSON.stringify(body),
+      timeoutMs: AUTH_REQUEST_TIMEOUT_MS,
     });
 
-    const data = await response.json();
+    const data = asRecord(await parseJsonResponse(response));
     console.log('[API] Register response status:', response.status);
 
     if (!response.ok) {
@@ -494,14 +540,21 @@ export const register = async (
 
     console.log('[API] Registration successful, token received');
     const persist = options.persist !== false;
-    await setToken(data.token, { persist });
-    if (data.user) {
-      await setStoredProfile(data.user, { persist });
+    const token = typeof data.token === 'string' ? data.token : null;
+    if (!token) {
+      throw new Error('Registration succeeded but no token was returned.');
+    }
+    await setToken(token, { persist });
+    if (data.user && typeof data.user === 'object') {
+      await setStoredProfile(data.user as UserProfile, { persist });
     }
 
     return data;
   } catch (error) {
     console.error('[API] Register error:', error);
+    if (isNetworkFailure(error)) {
+      throw new Error(networkFailureMessage());
+    }
     throw error;
   }
 };
