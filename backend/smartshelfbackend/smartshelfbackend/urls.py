@@ -21,8 +21,10 @@ from django.urls import path, include
 
 from learning.views import DashboardView
 from users.legal_views import PrivacyPolicyPageView, TermsOfUsePageView
+from smartshelfbackend.root_views import api_root
 
 urlpatterns = [
+    path('', api_root, name='api-root'),
     path('privacy/', PrivacyPolicyPageView.as_view(), name='privacy-policy'),
     path('terms/', TermsOfUsePageView.as_view(), name='terms-of-use'),
     path('admin/', admin.site.urls),
