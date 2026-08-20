@@ -1,0 +1,26 @@
+# Keep EAS upload small / reliable (network resets are common with ~130MB archives)
+
+# Accidental nested Expo template copy (includes its own node_modules locally)
+/smartshelf/
+
+# Generated / local-only
+/android/
+/ios/
+/.expo/
+/dist/
+/web-build/
+/node_modules/
+
+# Secrets & credentials
+.env
+.env.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Binaries / store assets not needed for the native build
+*.apk
+*.aab
+/store-assets/

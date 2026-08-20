@@ -54,7 +54,10 @@ export default function ParentSignInScreen() {
 
   const handleSignIn = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-    if (!username.trim() || !password.trim()) return;
+    if (!username.trim() || !password.trim()) {
+      setError('Please enter your username and password.');
+      return;
+    }
     setError(null);
     setIsLoading(true);
     try {

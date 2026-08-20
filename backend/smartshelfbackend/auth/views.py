@@ -1,7 +1,5 @@
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
-from django.core.cache import cache
-from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
 import logging
@@ -11,24 +9,21 @@ from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-import secrets
-import string
 
 from users.models import AuditLog, Organization, ParentalConsent, PublisherProfile, UserProfile
 from users.serializers import OrganizationSerializer, UserProfileSerializer
+from .password_reset import (
+    RESET_CODE_MAX_ATTEMPTS,
+    codes_match,
+    create_challenge,
+    email_delivery_ready,
+    generate_reset_code,
+    get_active_challenge,
+    send_reset_email,
+)
 from .throttles import LoginRateThrottle, PasswordResetRateThrottle, RegisterRateThrottle
 
-RESET_CODE_TTL_SECONDS = 15 * 60
-RESET_CODE_MAX_ATTEMPTS = 5
 logger = logging.getLogger(__name__)
-
-
-def _password_reset_cache_key(email: str) -> str:
-    return f"password-reset:{email.lower().strip()}"
-
-
-def _generate_reset_code() -> str:
-    return "".join(secrets.choice(string.digits) for _ in range(6))
 
 
 # Version tags embedded in the app / backend — bump these when policy text changes.
@@ -313,54 +308,68 @@ class PasswordResetRequestView(APIView):
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data["email"].lower().strip()
 
-        user = UserProfile.objects.filter(email__iexact=email).first()
-        if user:
-            code = _generate_reset_code()
-            cache.set(
-                _password_reset_cache_key(email),
+        smtp_ok, smtp_reason = email_delivery_ready()
+        if not smtp_ok and not settings.DEBUG:
+            logger.error("Password reset blocked: %s", smtp_reason)
+            return Response(
                 {
-                    "code": code,
-                    "user_id": str(user.id),
-                    "attempts": 0,
-                },
-                timeout=RESET_CODE_TTL_SECONDS,
-            )
-            try:
-                send_mail(
-                    subject="SmartShelf password reset code",
-                    message=(
-                        f"Your SmartShelf password reset code is {code}.\n\n"
-                        "This code expires in 15 minutes."
-                    ),
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[email],
-                    fail_silently=False,
-                )
-            except Exception as exc:
-                logger.exception("Failed to send password reset email to %s", email)
-                if settings.DEBUG:
-                    return Response(
-                        {
-                            "success": True,
-                            "message": "Email delivery failed in debug mode. Use the code below.",
-                            "debug_reset_code": code,
-                            "delivery_failed": True,
-                            "error": str(exc),
-                        }
+                    "error": (
+                        "Password reset email is not configured on the server. "
+                        "Please contact support at "
+                        f"{getattr(settings, 'PRIVACY_CONTACT_EMAIL', 'info@smartshelflearn.com')}."
                     )
-                return Response(
-                    {"error": "Could not send reset email. Please try again."},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
-        # Always return a generic success response to prevent account enumeration.
-        return Response(
-            {
-                "success": True,
-                "message": "If that email exists, a reset code has been sent.",
-                **({"debug_reset_code": code} if settings.DEBUG and user else {}),
-            }
-        )
+        user = UserProfile.objects.filter(email__iexact=email).first()
+        debug_code = None
+        delivery_failed = False
+        delivery_error = ""
+
+        if user:
+            code = generate_reset_code()
+            create_challenge(user, email, code)
+
+            if not smtp_ok:
+                # DEBUG only: allow local/console testing without real SMTP.
+                logger.warning(
+                    "Password reset for %s: email not deliverable (%s)",
+                    email,
+                    smtp_reason,
+                )
+                delivery_failed = True
+                delivery_error = smtp_reason
+                debug_code = code
+            else:
+                try:
+                    send_reset_email(email, code)
+                except Exception as exc:
+                    logger.exception("Failed to send password reset email to %s", email)
+                    delivery_failed = True
+                    delivery_error = str(exc)
+                    if settings.DEBUG:
+                        debug_code = code
+                    else:
+                        return Response(
+                            {"error": "Could not send reset email. Please try again later."},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        )
+
+        payload = {
+            "success": True,
+            "message": (
+                "Email delivery is not configured; use the code shown below."
+                if delivery_failed and debug_code
+                else "If that email exists, a reset code has been sent. Check your inbox and spam folder."
+            ),
+        }
+        if debug_code:
+            payload["debug_reset_code"] = debug_code
+            payload["delivery_failed"] = True
+            if delivery_error:
+                payload["error"] = delivery_error
+        return Response(payload)
 
 
 class PasswordResetConfirmView(APIView):
@@ -373,37 +382,35 @@ class PasswordResetConfirmView(APIView):
         data = serializer.validated_data
         email = data["email"].lower().strip()
         code = data["code"].strip()
-        cache_key = _password_reset_cache_key(email)
-        stored = cache.get(cache_key)
+        challenge = get_active_challenge(email)
 
-        if not stored:
+        if not challenge:
             return Response(
                 {"error": "Code is invalid or expired."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        attempts = int(stored.get("attempts", 0))
-        if attempts >= RESET_CODE_MAX_ATTEMPTS:
-            cache.delete(cache_key)
+        if challenge.attempts >= RESET_CODE_MAX_ATTEMPTS:
+            challenge.delete()
             return Response(
                 {"error": "Too many attempts. Request a new code."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if stored.get("code") != code:
-            stored["attempts"] = attempts + 1
-            cache.set(cache_key, stored, timeout=RESET_CODE_TTL_SECONDS)
+        if not codes_match(code, challenge.code_hash):
+            challenge.attempts += 1
+            challenge.save(update_fields=["attempts"])
             return Response(
                 {"error": "Code is invalid or expired."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         user = UserProfile.objects.filter(
-            id=stored.get("user_id"),
+            id=challenge.user_id,
             email__iexact=email,
         ).first()
         if not user:
-            cache.delete(cache_key)
+            challenge.delete()
             return Response(
                 {"error": "Code is invalid or expired."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -411,10 +418,13 @@ class PasswordResetConfirmView(APIView):
 
         user.set_password(data["new_password"])
         user.save(update_fields=["password"])
+        user.clear_failed_logins()
         Token.objects.filter(user=user).delete()
-        cache.delete(cache_key)
+        challenge.delete()
 
-        return Response({"success": True, "message": "Password reset successful."})
+        return Response(
+            {"success": True, "message": "Password updated. You can sign in now."}
+        )
 
 
 class PolicyInfoView(APIView):

@@ -710,3 +710,38 @@ class ParentInvite(models.Model):
         if self.status == self.Status.PENDING and timezone.now() >= self.expires_at:
             self.status = self.Status.EXPIRED
             self.save(update_fields=["status"])
+
+
+class PasswordResetChallenge(models.Model):
+    """
+    Durable password-reset codes (DB-backed).
+
+    LocMem cache is unsafe with multiple Gunicorn workers on Render — the request
+    that creates a code may not be the worker that verifies it. Storing challenges
+    in Postgres keeps request + confirm consistent.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.EmailField(db_index=True)
+    user = models.ForeignKey(
+        UserProfile,
+        on_delete=models.CASCADE,
+        related_name="password_reset_challenges",
+    )
+    code_hash = models.CharField(max_length=128)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["email", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"Password reset for {self.email}"
+
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() >= self.expires_at

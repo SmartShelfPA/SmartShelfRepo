@@ -82,8 +82,11 @@ export function buildEpubReaderHtml(
 
       function send(payload) {
         try {
+          var data = JSON.stringify(payload);
           if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-            window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+            window.ReactNativeWebView.postMessage(data);
+          } else if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ source: 'smartshelf-epub', payload: data }, '*');
           }
         } catch (e) {}
       }
@@ -241,6 +244,14 @@ export function buildEpubReaderHtml(
             send({ type: 'error', message: String(e) });
           }
         };
+
+        window.addEventListener('message', function (event) {
+          try {
+            var data = event.data;
+            if (!data || data.source !== 'smartshelf-epub-host' || data.action !== 'receive') return;
+            if (typeof data.msgJson === 'string') window.smartshelfReceive(data.msgJson);
+          } catch (e3) {}
+        });
       } catch (syncErr) {
         finishOpen(String(syncErr && syncErr.message ? syncErr.message : syncErr));
       }

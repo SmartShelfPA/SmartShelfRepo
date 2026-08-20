@@ -6,11 +6,13 @@ import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useIsDesktopLayout } from '@/src/lib/desktop';
 import { useRequireAuth } from '@/src/hooks/useRequireAuth';
 
 export default function TabLayout() {
   useRequireAuth();
   const colorScheme = useColorScheme();
+  const desktop = useIsDesktopLayout();
 
   return (
     <Tabs
@@ -18,6 +20,7 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
         tabBarButton: HapticTab,
+        tabBarStyle: desktop ? { display: 'none' } : undefined,
       }}>
       <Tabs.Screen
         name="index"

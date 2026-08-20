@@ -103,6 +103,26 @@ export async function removeDownload(assetId: string): Promise<void> {
   await writeIndex(map);
 }
 
+export async function pdfBlobExists(assetId: string): Promise<boolean> {
+  const record = await getDownload(assetId);
+  if (!record?.localUri) return false;
+  try {
+    return new File(record.localUri).exists;
+  } catch {
+    return false;
+  }
+}
+
+/** Web/Electron only — native downloads write files directly. */
+export async function storePdfBlob(_assetId: string, _blob: Blob): Promise<string> {
+  throw new Error('storePdfBlob is not used on native');
+}
+
+export async function getPdfBlobUrl(assetId: string): Promise<string | null> {
+  const record = await getDownload(assetId);
+  return record?.localUri ?? null;
+}
+
 /** True when the offline access window has lapsed and re-authorization is required. */
 export function isOfflineExpired(record: ProtectedDownloadRecord, now = Date.now()): boolean {
   const ts = Date.parse(record.offlineExpiresAt);

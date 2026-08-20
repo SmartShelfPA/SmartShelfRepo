@@ -13,6 +13,7 @@ from .models import (
     Organization,
     ParentalConsent,
     ParentInvite,
+    PasswordResetChallenge,
     PublisherProfile,
     ReadingProgress,
     RetentionPolicy,
@@ -422,3 +423,12 @@ class ParentInviteAdmin(admin.ModelAdmin):
     search_fields = ("code", "student__username", "invite_email")
     readonly_fields = ("id", "code", "token", "created_at", "accepted_at", "accepted_by")
     raw_id_fields = ("student", "created_by", "accepted_by")
+
+
+@admin.register(PasswordResetChallenge)
+class PasswordResetChallengeAdmin(admin.ModelAdmin):
+    list_display = ("email", "user", "attempts", "created_at", "expires_at")
+    list_filter = ("created_at",)
+    search_fields = ("email", "user__username", "user__email")
+    readonly_fields = ("id", "email", "user", "code_hash", "attempts", "created_at", "expires_at")
+    raw_id_fields = ("user",)

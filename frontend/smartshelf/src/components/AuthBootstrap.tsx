@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
+import { Image, Platform, StyleSheet, View } from 'react-native';
 import { useAuthStore } from '@/src/store/auth';
 
 type Props = {
@@ -22,8 +22,12 @@ export function AuthBootstrap({ children }: Props) {
 
   if (!isClient || isHydrating) {
     return (
-      <View style={styles.splash}>
-        <ActivityIndicator size="large" color="#00FF41" />
+      <View style={styles.splash} accessibilityLabel="SmartShelf is loading">
+        <Image
+          source={require('@/assets/images/ss-logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
       </View>
     );
   }
@@ -37,5 +41,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#000',
+  },
+  logo: {
+    width: 180,
+    height: 180,
   },
 });

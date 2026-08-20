@@ -213,8 +213,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   logo: { width: 200, height: 120 },
-  title: { marginBottom: 8, textAlign: 'center' },
-  subtitle: { fontSize: 16, textAlign: 'center', opacity: 0.7 },
+  title: { marginBottom: 8, textAlign: 'center', paddingVertical: 4 },
+  subtitle: { fontSize: 16, lineHeight: 22, textAlign: 'center', opacity: 0.7 },
   form: { gap: 20 },
   input: { width: '100%' },
   stayRow: {

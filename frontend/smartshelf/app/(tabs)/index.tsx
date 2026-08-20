@@ -13,7 +13,9 @@ import { useAuthStore } from '@/src/store/auth';
 import { useProfileAvatar } from '@/src/hooks/useProfileAvatar';
 import { fetchQuote, Quote } from '@/services/quotes';
 import { DashboardSection } from '@/src/components/dashboard/DashboardSection';
+import { ContinueReadingSection } from '@/src/components/desktop/ContinueReadingSection';
 import { useDashboardData } from '@/src/hooks/useDashboardData';
+import { useIsDesktopLayout } from '@/src/lib/desktop';
 import { useStreak } from '@/src/hooks/useStreak';
 
 export default function HomeScreen() {
@@ -34,6 +36,7 @@ export default function HomeScreen() {
   const { data: dashboard, isLoading: dashLoading, error: dashError, refetch: refetchDash } =
     useDashboardData();
   const streakDays = useStreak(dashboard?.recentSessions ?? []);
+  const desktop = useIsDesktopLayout();
 
   useEffect(() => {
     let isMounted = true;
@@ -82,11 +85,13 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
+      {desktop ? null : (
       <HomeHeader
         userInitials={userInitials}
         avatarUri={avatarUri ?? undefined}
         rightContent={<StreakBadge streakDays={streakDays} />}
       />
+      )}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
@@ -101,6 +106,8 @@ export default function HomeScreen() {
               {cursorVisible ? '|' : ' '}
             </ThemedText>
           </ThemedText>
+
+          {desktop ? <ContinueReadingSection dashboard={dashboard} /> : null}
 
           <ThemedView style={styles.section}>
             <ThemedText style={styles.sectionTitle} type="defaultSemiBold">

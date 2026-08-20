@@ -6,12 +6,15 @@ import 'react-native-reanimated';
 import { useEffect } from 'react';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { usePhonePortraitLock } from '@/src/hooks/usePhonePortraitLock';
 import { AuthBootstrap } from '@/src/components/AuthBootstrap';
+import { DesktopShell } from '@/src/components/DesktopShell';
 import { ErrorBoundary } from '@/src/components/ErrorBoundary';
 import { installGlobalErrorHandlers } from '@/src/lib/errorReporter';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  usePhonePortraitLock();
 
   useEffect(() => {
     installGlobalErrorHandlers();
@@ -21,6 +24,7 @@ export default function RootLayout() {
     <ErrorBoundary>
     <SafeAreaProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <DesktopShell>
         <AuthBootstrap>
         <Stack initialRouteName="index">
           <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -47,6 +51,7 @@ export default function RootLayout() {
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         </AuthBootstrap>
+        </DesktopShell>
         <StatusBar style="auto" />
       </ThemeProvider>
     </SafeAreaProvider>

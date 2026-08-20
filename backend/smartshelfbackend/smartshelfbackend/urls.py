@@ -22,9 +22,13 @@ from django.urls import path, include
 from learning.views import DashboardView
 from users.legal_views import PrivacyPolicyPageView, TermsOfUsePageView
 from smartshelfbackend.root_views import api_root
+from smartshelfbackend.download_views import download_macos, download_page, download_windows
 
 urlpatterns = [
     path('', api_root, name='api-root'),
+    path('download/', download_page, name='desktop-download'),
+    path('download/windows', download_windows, name='desktop-download-windows'),
+    path('download/macos', download_macos, name='desktop-download-macos'),
     path('privacy/', PrivacyPolicyPageView.as_view(), name='privacy-policy'),
     path('terms/', TermsOfUsePageView.as_view(), name='terms-of-use'),
     path('admin/', admin.site.urls),

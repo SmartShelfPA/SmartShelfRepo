@@ -46,7 +46,8 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    lineHeight: 32,
+    // Keep lineHeight above fontSize so glyphs are not clipped on web/Electron.
+    lineHeight: 40,
   },
   subtitle: {
     fontSize: 20,

@@ -38,6 +38,7 @@ import {
 } from '@/src/services/igcseEpubService';
 import type { EpubLocationRef, IgcsTextbook } from '@/src/types/igcse';
 import { useIgcsReaderStore } from '@/src/store/igcseReaderStore';
+import { useNowReadingStore } from '@/src/store/nowReading';
 
 function chapterBasename(href?: string) {
   if (!href) return '';
@@ -133,6 +134,18 @@ export default function IgcsReaderScreen() {
       cancelled = true;
     };
   }, [bookId]);
+
+  useEffect(() => {
+    if (!bookId || !book) return;
+    useNowReadingStore.getState().setSession({
+      kind: 'epub',
+      bookId,
+      title: book.title,
+      subtitle: book.subject,
+      progressPercent: book.progressPercent ?? 0,
+      coverUri: book.coverImageUrl,
+    });
+  }, [book, bookId]);
 
   useEffect(() => {
     if (!bookId || !book) return;
@@ -270,6 +283,11 @@ export default function IgcsReaderScreen() {
       Math.round(lastFractionRef.current * 100);
     return `${Math.min(100, Math.max(0, p))}%`;
   }, [livePct, reader.progress?.fraction]);
+
+  useEffect(() => {
+    if (!bookId || livePct == null) return;
+    useNowReadingStore.getState().updateProgress(bookId, livePct, chapterHint || undefined);
+  }, [bookId, livePct, chapterHint]);
 
   const { bookmarks, highlights, notes } = reader;
 

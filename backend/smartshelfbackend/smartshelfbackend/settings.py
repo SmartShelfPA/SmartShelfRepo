@@ -249,6 +249,16 @@ COMPLIANCE_NDPA = os.getenv('COMPLIANCE_NDPA', 'true').lower() == 'true'   # Nig
 COMPLIANCE_COPPA = os.getenv('COMPLIANCE_COPPA', 'true').lower() == 'true'  # US COPPA
 COMPLIANCE_PIPEDA = os.getenv('COMPLIANCE_PIPEDA', 'true').lower() == 'true'  # Canada PIPEDA
 
+# Permanent desktop installer links (WordPress buttons should use /download/windows).
+DESKTOP_DOWNLOAD_WINDOWS_URL = os.getenv(
+    'DESKTOP_DOWNLOAD_WINDOWS_URL',
+    'https://github.com/SmartShelfPA/SmartShelfRepo/releases/latest/download/SmartShelf-Setup.exe',
+)
+DESKTOP_DOWNLOAD_MACOS_URL = os.getenv(
+    'DESKTOP_DOWNLOAD_MACOS_URL',
+    'https://github.com/SmartShelfPA/SmartShelfRepo/releases/latest/download/SmartShelf.dmg',
+)
+
 # Email settings (used by password reset flow).
 # Default writes emails to console in local/dev unless overridden by env.
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')

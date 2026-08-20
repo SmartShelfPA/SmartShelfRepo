@@ -7,6 +7,8 @@ node_modules/
 .expo/
 dist/
 web-build/
+desktop-release/
+build3.json
 expo-env.d.ts
 
 # Native

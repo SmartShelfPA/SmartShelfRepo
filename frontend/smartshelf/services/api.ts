@@ -1,7 +1,16 @@
 import { Platform } from 'react-native';
 
 import { getDevApiBaseUrl } from '@/src/lib/devApiBaseUrl';
+import { isElectronDesktop } from '@/src/lib/desktop';
 import { universalStorage } from '@/src/lib/universalStorage';
+
+export const PRODUCTION_API_BASE_URL = 'https://smartshelf-api.onrender.com/api';
+
+function isLanHttpUrl(url: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)/i.test(
+    url
+  );
+}
 
 // Dev URL is chosen in getDevApiBaseUrl() (web / simulators / emulator / physical device).
 // Override anytime: EXPO_PUBLIC_API_BASE_URL=https://your-tunnel.ngrok-free.dev/api
@@ -10,6 +19,14 @@ import { universalStorage } from '@/src/lib/universalStorage';
 /** Browser web dev: use localhost instead of a LAN IP from .env. */
 function resolveApiBaseUrl(): string {
   const configured = process.env.EXPO_PUBLIC_API_BASE_URL?.trim();
+  const desktopOverride = process.env.EXPO_PUBLIC_DESKTOP_API_BASE_URL?.trim();
+
+  if (isElectronDesktop()) {
+    if (desktopOverride) return desktopOverride;
+    if (configured && !isLanHttpUrl(configured)) return configured;
+    return PRODUCTION_API_BASE_URL;
+  }
+
   if (configured) {
     if (Platform.OS === 'web' && /^http:\/\/192\.168\.\d+\.\d+(:\d+)?/i.test(configured)) {
       return configured.replace(/^http:\/\/192\.168\.\d+\.\d+/, 'http://localhost');
@@ -19,8 +36,7 @@ function resolveApiBaseUrl(): string {
   if (__DEV__) {
     return getDevApiBaseUrl();
   }
-  // Production fallback — keep in sync with EAS production secret EXPO_PUBLIC_API_BASE_URL.
-  return 'https://smartshelf-api.onrender.com/api';
+  return PRODUCTION_API_BASE_URL;
 }
 
 export const API_BASE_URL = resolveApiBaseUrl();
@@ -445,8 +461,8 @@ function formatApiValidationErrors(data: unknown): string {
 }
 
 /** Schools listed on the registration screen (public endpoint, no auth). */
-export const fetchOrganizations = async (): Promise<SchoolOrganization[]> => {
-  const root = API_BASE_URL.replace(/\/+$/, '');
+async function fetchOrganizationsFrom(baseUrl: string): Promise<SchoolOrganization[]> {
+  const root = baseUrl.replace(/\/+$/, '');
   const url = `${root}/auth/organizations/`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -455,7 +471,7 @@ export const fetchOrganizations = async (): Promise<SchoolOrganization[]> => {
   try {
     response = await fetch(url, {
       method: 'GET',
-      headers: { 'Content-Type': 'application/json', ...getApiExtraHeaders() },
+      headers: { ...getApiExtraHeaders() },
       signal: controller.signal,
     });
   } catch (e) {
@@ -485,6 +501,23 @@ export const fetchOrganizations = async (): Promise<SchoolOrganization[]> => {
     throw new Error('Could not load schools (unexpected response).');
   }
   return data as SchoolOrganization[];
+}
+
+export const fetchOrganizations = async (): Promise<SchoolOrganization[]> => {
+  try {
+    return await fetchOrganizationsFrom(API_BASE_URL);
+  } catch (primaryError) {
+    const primary = API_BASE_URL.replace(/\/+$/, '');
+    const production = PRODUCTION_API_BASE_URL.replace(/\/+$/, '');
+    if (primary !== production) {
+      try {
+        return await fetchOrganizationsFrom(PRODUCTION_API_BASE_URL);
+      } catch {
+        // Keep the original error — it explains which URL failed first.
+      }
+    }
+    throw primaryError;
+  }
 };
 
 /**

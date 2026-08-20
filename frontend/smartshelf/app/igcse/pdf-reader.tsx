@@ -12,6 +12,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getBackendBaseUrl } from '@/services/api';
 import { useBookLastPage } from '@/src/hooks/useBookLastPage';
+import { useNowReadingStore } from '@/src/store/nowReading';
 
 const PDF_JS_VIEWER = 'https://mozilla.github.io/pdf.js/web/viewer.html';
 
@@ -44,6 +45,18 @@ export default function IgcsePdfReaderScreen() {
   const [ready, setReady] = useState(false);
 
   const sourceUri = (localUri as string) || (url as string) || '';
+
+  useEffect(() => {
+    if (!bookId) return;
+    useNowReadingStore.getState().setSession({
+      kind: 'pdf',
+      bookId,
+      title: String(title || 'Textbook'),
+      subtitle: 'PDF textbook',
+      progressPercent: 0,
+      assetId: bookId,
+    });
+  }, [bookId, title]);
 
   useEffect(() => {
     if (!bookId) {
@@ -90,7 +103,6 @@ export default function IgcsePdfReaderScreen() {
 
       <View style={styles.frameWrap}>
         {ready ? (
-          // @ts-expect-error iframe is valid on web
           <iframe src={viewerSrc} title={title ?? 'PDF'} style={styles.frame} />
         ) : (
           <View style={[styles.center, { backgroundColor: bgColor }]}>

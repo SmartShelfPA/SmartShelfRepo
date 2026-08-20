@@ -1,6 +1,5 @@
-"""Allow Expo web (localhost) to call the API during local development."""
+"""Allow the Expo web/Electron app to call the API from another origin."""
 
-from django.conf import settings
 from django.http import HttpResponse
 
 
@@ -14,9 +13,7 @@ class DevCorsMiddleware:
         else:
             response = self.get_response(request)
 
-        if not settings.DEBUG:
-            return response
-
+        # Token auth (no cookies) — safe to allow browser/Electron origins.
         response["Access-Control-Allow-Origin"] = "*"
         response["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         response["Access-Control-Allow-Headers"] = (

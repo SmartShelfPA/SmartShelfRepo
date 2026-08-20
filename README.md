@@ -15,6 +15,10 @@ PostgreSQL: `localhost:5432` (`postgres` / `postgres`, db `smartshelf`)
 
 Release builds need a **public** API URL (not `192.168.x.x`). See [docs/MOBILE_API_SETUP.md](docs/MOBILE_API_SETUP.md).
 
+### Desktop (Windows + Mac)
+
+Expo web wrapped in Electron — installers and dev commands: [docs/DESKTOP.md](docs/DESKTOP.md).
+
 ### IGCSE exam simulator (study agent pipeline)
 
 Windows setup for [igcse-study-agent](https://github.com/deepakp1308/igcse-study-agent) (past papers → practice PDFs → static simulator):

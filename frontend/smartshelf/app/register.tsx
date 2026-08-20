@@ -29,6 +29,7 @@ import {
 import {
   DEFAULT_SCHOOL_SLUG,
   FALLBACK_DEFAULT_SCHOOL,
+  displaySchoolName,
 } from '@/src/constants/defaultSchool';
 
 /** Age below which we require explicit parental / school consent acknowledgement. */
@@ -94,6 +95,7 @@ export default function RegisterScreen() {
   const [orgsLoading, setOrgsLoading] = useState(true);
   const [orgsError, setOrgsError] = useState<string | null>(null);
   const [orgPickerOpen, setOrgPickerOpen] = useState(false);
+  const [orgQuery, setOrgQuery] = useState('');
 
   const [errors, setErrors] = useState<FormErrors>(emptyErrors());
   const [registerError, setRegisterError] = useState<string | null>(null);
@@ -109,40 +111,30 @@ export default function RegisterScreen() {
     currentValuesRef.current = formData;
   }, [formData]);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setOrgsLoading(true);
-      setOrgsError(null);
-      try {
-        const list = await fetchOrganizations();
-        if (!cancelled) {
-          setOrganizations(list);
-          const preferred =
-            list.find((o) => o.slug === 'default-school') ?? (list.length === 1 ? list[0] : null);
-          if (preferred) {
-            setSelectedOrgSlug(preferred.slug);
-          }
-        }
-      } catch (e: unknown) {
-        if (!cancelled) {
-          const detail = e instanceof Error ? e.message : 'Failed to load schools';
-          setOrganizations([FALLBACK_DEFAULT_SCHOOL]);
-          setSelectedOrgSlug(DEFAULT_SCHOOL_SLUG);
-          setOrgsError(
-            `${detail} Showing Default School offline — sign-up will work after the app can reach your API (rebuild with a public URL; see docs/MOBILE_API_SETUP.md).`
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setOrgsLoading(false);
-        }
+  const loadSchools = useCallback(async () => {
+    setOrgsLoading(true);
+    setOrgsError(null);
+    try {
+      const list = await fetchOrganizations();
+      setOrganizations(list);
+      const preferred =
+        list.find((o) => o.slug === DEFAULT_SCHOOL_SLUG) ?? (list.length === 1 ? list[0] : null);
+      if (preferred) {
+        setSelectedOrgSlug(preferred.slug);
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    } catch (e: unknown) {
+      const detail = e instanceof Error ? e.message : 'Failed to load schools';
+      setOrganizations([FALLBACK_DEFAULT_SCHOOL]);
+      setSelectedOrgSlug(DEFAULT_SCHOOL_SLUG);
+      setOrgsError(detail);
+    } finally {
+      setOrgsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadSchools();
+  }, [loadSchools]);
 
   const tintColor = useThemeColor({}, 'tint');
   const backgroundColor = useThemeColor({}, 'background');
@@ -158,8 +150,19 @@ export default function RegisterScreen() {
   const buttonBgColor = '#00FF41';
   const buttonTextColor = '#FFFFFF';
 
-  const selectedOrgName =
-    organizations.find((o) => o.slug === selectedOrgSlug)?.name ?? null;
+  const selectedOrgName = (() => {
+    const org = organizations.find((o) => o.slug === selectedOrgSlug);
+    return org ? displaySchoolName(org) : null;
+  })();
+
+  const filteredOrganizations = organizations.filter((org) => {
+    const q = orgQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      displaySchoolName(org).toLowerCase().includes(q) ||
+      (org.address || '').toLowerCase().includes(q)
+    );
+  });
 
   const validateSimpleField = (fieldName: SimpleField, value: string): string | null => {
     switch (fieldName) {
@@ -331,8 +334,8 @@ export default function RegisterScreen() {
     <ThemedView style={styles.inputContainer}>
       <ThemedText style={styles.label}>School or university</ThemedText>
       <Pressable
-        onPress={() => !orgsLoading && organizations.length > 0 && setOrgPickerOpen(true)}
-        disabled={isLoading || orgsLoading || organizations.length === 0}
+        onPress={() => !orgsLoading && setOrgPickerOpen(true)}
+        disabled={isLoading || orgsLoading}
         style={({ pressed }) => [
           styles.pickerShell,
           {
@@ -348,18 +351,23 @@ export default function RegisterScreen() {
           }}>
           {orgsLoading
             ? 'Loading schools…'
-            : organizations.length === 0
-              ? orgsError
-                ? 'Could not load schools'
-                : 'No schools available — run backend migrations'
-              : selectedOrgName ?? 'Tap to select your school'}
+            : selectedOrgName ?? 'Tap to select your school'}
         </ThemedText>
         {orgsLoading ? <ActivityIndicator color={tintColor} /> : null}
       </Pressable>
       {errors.organization ? (
         <ThemedText style={styles.errorText}>{errors.organization}</ThemedText>
       ) : null}
-      {orgsError ? <ThemedText style={styles.errorText}>{orgsError}</ThemedText> : null}
+      {orgsError ? (
+        <ThemedText style={styles.errorText}>
+          {orgsError} You can still choose Independent / school not listed, or tap Retry.
+        </ThemedText>
+      ) : (
+        <ThemedText style={styles.helperText}>
+          If your school is not listed yet, choose Independent / school not listed. Schools are added
+          by SmartShelf when a school signs up.
+        </ThemedText>
+      )}
     </ThemedView>
   );
 
@@ -377,11 +385,9 @@ export default function RegisterScreen() {
         showsVerticalScrollIndicator={false}>
         <ThemedView style={styles.content}>
           <ThemedView style={styles.header}>
-            <ThemedView style={styles.titleContainer}>
-              <ThemedText type="title" style={styles.title} numberOfLines={2}>
-                Student sign up
-              </ThemedText>
-            </ThemedView>
+            <ThemedText type="title" style={styles.title}>
+              Student sign up
+            </ThemedText>
             <ThemedText style={styles.subtitle}>
               Create your student account and pick your school
             </ThemedText>
@@ -579,9 +585,23 @@ export default function RegisterScreen() {
             <ThemedText type="subtitle" style={styles.modalTitle}>
               Select your school
             </ThemedText>
+            <ThemedTextInput
+              style={styles.searchInput}
+              placeholder="Search by school name"
+              value={orgQuery}
+              onChangeText={setOrgQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
             <FlatList
-              data={organizations}
+              data={filteredOrganizations}
               keyExtractor={(item) => item.id}
+              ListEmptyComponent={
+                <ThemedText style={[styles.orgMeta, { padding: 16, color: iconColor }]}>
+                  No matching schools. Choose Independent / school not listed, then ask SmartShelf
+                  to add your school.
+                </ThemedText>
+              }
               renderItem={({ item }) => (
                 <TouchableOpacity
                   style={[
@@ -593,10 +613,11 @@ export default function RegisterScreen() {
                   ]}
                   onPress={() => {
                     setSelectedOrgSlug(item.slug);
+                    setOrgQuery('');
                     setErrors((e) => (e.organization ? { ...e, organization: null } : e));
                     setOrgPickerOpen(false);
                   }}>
-                  <ThemedText style={styles.orgName}>{item.name}</ThemedText>
+                  <ThemedText style={styles.orgName}>{displaySchoolName(item)}</ThemedText>
                   {item.address ? (
                     <ThemedText style={[styles.orgMeta, { color: iconColor }]} numberOfLines={2}>
                       {item.address}
@@ -606,6 +627,25 @@ export default function RegisterScreen() {
               )}
               style={styles.orgList}
             />
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={() => {
+                setSelectedOrgSlug(DEFAULT_SCHOOL_SLUG);
+                setOrgQuery('');
+                setErrors((e) => (e.organization ? { ...e, organization: null } : e));
+                setOrgPickerOpen(false);
+              }}>
+              <ThemedText style={{ color: tintColor, fontWeight: '600' }}>
+                Can&apos;t find my school
+              </ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={() => {
+                void loadSchools();
+              }}>
+              <ThemedText style={{ color: tintColor }}>Retry loading schools</ThemedText>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.modalClose} onPress={() => setOrgPickerOpen(false)}>
               <ThemedText style={{ color: tintColor, fontWeight: '600' }}>Cancel</ThemedText>
             </TouchableOpacity>
@@ -635,21 +675,21 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     alignItems: 'center',
     width: '100%',
-  },
-  titleContainer: {
-    width: '100%',
-    paddingHorizontal: 8,
-    marginBottom: 8,
-    alignItems: 'center',
+    overflow: 'visible',
   },
   title: {
     textAlign: 'center',
     width: '100%',
+    marginBottom: 8,
+    paddingVertical: 4,
+    flexShrink: 1,
   },
   subtitle: {
     fontSize: 16,
+    lineHeight: 22,
     textAlign: 'center',
     opacity: 0.7,
+    paddingHorizontal: 8,
   },
   bannerError: {
     marginBottom: 16,
@@ -768,6 +808,9 @@ const styles = StyleSheet.create({
   modalTitle: {
     marginBottom: 12,
     textAlign: 'center',
+  },
+  searchInput: {
+    marginBottom: 8,
   },
   orgList: {
     maxHeight: 360,

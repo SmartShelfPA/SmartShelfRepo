@@ -3,24 +3,9 @@ import { StyleSheet, View } from 'react-native';
 import WebView, { WebViewMessageEvent } from 'react-native-webview';
 
 import { buildEpubReaderHtml } from './buildEpubReaderHtml';
+import type { EpubReaderHandle, EpubReaderOutboundMessage } from './epubReaderTypes';
 
-export type EpubReaderOutboundMessage =
-  | { type: 'debug'; message: string }
-  | { type: 'ready' }
-  | {
-      type: 'relocated';
-      fraction: number;
-      startCfi?: string;
-      endCfi?: string;
-      /** Spine/content document href when epub.js exposes it (annotation + API sync). */
-      chapterHref?: string;
-    }
-  | { type: 'toc'; toc: unknown }
-  | { type: 'error'; message: string };
-
-export type EpubReaderHandle = {
-  send: (msg: Record<string, unknown>) => void;
-};
+export type { EpubReaderHandle, EpubReaderOutboundMessage };
 
 type Props = {
   epubUrl: string;

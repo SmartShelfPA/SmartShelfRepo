@@ -189,6 +189,9 @@ secrets.json
 
 # Build outputs
 build/
+# Keep Electron packaging icons (matched by build/ above)
+!frontend/smartshelf/desktop/build/
+!frontend/smartshelf/desktop/build/**
 dist/
 *.egg-info/
 # Mobile release binaries (do not commit — use build-artifacts/ locally)

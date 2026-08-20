@@ -1,0 +1,48 @@
+appId: ca.com.smartshelf.desktop
+productName: SmartShelf
+copyright: Copyright © SmartShelf
+# Desktop package.json has no npm deps — do not rebuild / pack Expo node_modules.
+electronVersion: 37.10.3
+npmRebuild: false
+nodeGypRebuild: false
+directories:
+  # Windows builds override this to %LOCALAPPDATA%\SmartShelf\desktop-release
+  # so OneDrive/Cursor cannot lock win-unpacked.tmp (EBUSY).
+  output: ../desktop-release
+  buildResources: build
+files:
+  - main.js
+  - preload.js
+  - downloadsStore.js
+  - package.json
+extraMetadata:
+  main: main.js
+extraResources:
+  - from: ../dist
+    to: web-dist
+  - from: build
+    to: build
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: SmartShelf-Setup.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+mac:
+  icon: build/icon.png
+  target:
+    - dmg
+  category: public.app-category.education
+  artifactName: SmartShelf.${ext}
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications

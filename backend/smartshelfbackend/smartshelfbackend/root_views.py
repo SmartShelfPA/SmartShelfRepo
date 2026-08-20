@@ -24,6 +24,7 @@ def api_root(_request):
   <p class="status">Service is live</p>
   <p>This host serves the SmartShelf backend. Useful links:</p>
   <ul>
+    <li><a href="/download/">Download desktop app</a></li>
     <li><a href="/admin/">Admin</a></li>
     <li><a href="/privacy/">Privacy Policy</a></li>
     <li><a href="/terms/">Terms of Use</a></li>
