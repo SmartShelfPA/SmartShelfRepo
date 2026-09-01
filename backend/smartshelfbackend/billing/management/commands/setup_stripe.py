@@ -180,7 +180,7 @@ class Command(BaseCommand):
             product = _ensure_product(spec)
             price = _ensure_price(product, spec)
             price_env[spec.env_key] = price.id
-            self.stdout.write(self.style.SUCCESS(f"  → {price.id}"))
+            self.stdout.write(self.style.SUCCESS(f"  -> {price.id}"))
 
         webhook_secret = ""
         if not options["skip_webhook"]:
@@ -191,17 +191,17 @@ class Command(BaseCommand):
                 endpoint = _ensure_webhook(webhook_url)
                 webhook_secret = endpoint.secret or ""
                 if webhook_secret:
-                    self.stdout.write(self.style.SUCCESS("  → webhook created (secret below)"))
+                    self.stdout.write(self.style.SUCCESS("  -> webhook created (secret below)"))
                 else:
                     self.stdout.write(
                         self.style.WARNING(
-                            "  → webhook already existed; secret is only shown once at creation. "
-                            "Copy it from Stripe Dashboard → Developers → Webhooks, or delete and re-run."
+                            "  -> webhook already existed; secret is only shown once at creation. "
+                            "Copy it from Stripe Dashboard -> Developers -> Webhooks, or delete and re-run."
                         )
                     )
 
         self.stdout.write("\n" + "=" * 60)
-        self.stdout.write("Paste into Render → smartshelf-api → Environment:\n")
+        self.stdout.write("Paste into Render -> smartshelf-api -> Environment:\n")
         if not dry_run:
             mode = "test" if secret.startswith("sk_test_") else "live"
             self.stdout.write(self.style.NOTICE(f"# Stripe mode: {mode}"))

@@ -5,7 +5,7 @@ from django.http import HttpResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework import serializers, status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 import stripe
@@ -31,6 +31,8 @@ class CheckoutSerializer(serializers.Serializer):
 
 class BillingPlansView(APIView):
     """Public catalog — shows which plans are purchasable (Stripe price configured)."""
+
+    permission_classes = [AllowAny]
 
     def get(self, request):
         tier = request.query_params.get("tier")
