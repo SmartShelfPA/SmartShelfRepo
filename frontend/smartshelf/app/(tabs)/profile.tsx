@@ -20,7 +20,8 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { useProfileAvatar } from '@/src/hooks/useProfileAvatar';
 import { useAuthStore } from '@/src/store/auth';
 import { PricingTiersModal } from '@/components/pricing-tiers-modal';
-import type { PricingTier } from '@/src/constants/pricingTiers';
+import { BillingPlanPickerModal } from '@/components/billing-plan-picker-modal';
+import type { PricingTier, PricingTierId } from '@/src/constants/pricingTiers';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -32,6 +33,7 @@ export default function ProfileScreen() {
   const { avatarUri, userInitials, displayName, saveFromPickerUri } = useProfileAvatar();
   const [showAchievements, setShowAchievements] = useState(false);
   const [showPrices, setShowPrices] = useState(false);
+  const [checkoutTier, setCheckoutTier] = useState<PricingTierId | null>(null);
   const colorScheme = useColorScheme();
   const mutedTextColor = colorScheme === 'dark' ? '#9BA1A6' : '#687076';
   const textColor = useThemeColor({}, 'text');
@@ -185,7 +187,14 @@ export default function ProfileScreen() {
         accentColor={accentColor}
         onTierPress={(tier: PricingTier) => {
           if (tier.id === 'student' || tier.id === 'micro' || tier.id === 'diaspora') {
-            Alert.alert(tier.title, 'Online checkout is coming soon. Check back after the next app update.');
+            if (!isAuthenticated) {
+              Alert.alert('Sign in required', 'Create an account or sign in to purchase a plan.');
+              setShowPrices(false);
+              router.push('/register');
+              return;
+            }
+            setShowPrices(false);
+            setCheckoutTier(tier.id);
             return;
           }
           Alert.alert(
@@ -193,6 +202,18 @@ export default function ProfileScreen() {
             'Email hello@smartshelf.ng to discuss institutional, publisher, or analytics partnerships.'
           );
         }}
+      />
+
+      <BillingPlanPickerModal
+        visible={checkoutTier !== null}
+        tier={checkoutTier}
+        onClose={() => setCheckoutTier(null)}
+        onComplete={() => void refreshProfile()}
+        cardBgColor={cardBgColor}
+        borderColor={borderColor}
+        textColor={textColor}
+        mutedColor={mutedTextColor}
+        accentColor={accentColor}
       />
 
       <Modal

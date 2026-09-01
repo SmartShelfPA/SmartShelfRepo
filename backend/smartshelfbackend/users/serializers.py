@@ -25,6 +25,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     )
     has_accepted_policies = serializers.BooleanField(read_only=True)
     is_minor_account = serializers.BooleanField(read_only=True)
+    has_active_subscription = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = UserProfile
@@ -51,11 +52,18 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "school_managed",
             "has_accepted_policies",
             "is_minor_account",
+            "subscription_tier",
+            "subscription_plan_id",
+            "subscription_status",
+            "subscription_active_until",
+            "has_active_subscription",
         )
         read_only_fields = (
             "id", "terms_accepted_at", "terms_version", "privacy_accepted_at",
             "privacy_version", "analytics_consent_at", "school_managed",
             "has_accepted_policies", "is_minor_account",
+            "subscription_tier", "subscription_plan_id", "subscription_status",
+            "subscription_active_until", "has_active_subscription",
         )
 
 

@@ -40,6 +40,7 @@ urlpatterns = [
     # IGCSE EPUB reader + annotations (authenticated).
     path('api/v1/igcse/', include('learning.igcse_urls')),
     path('api/v1/practice/', include('learning.practice_urls')),
+    path('api/v1/billing/', include('billing.urls')),
     path('api/v1/dashboard/', DashboardView.as_view(), name='dashboard'),
     # Canonical IGCSE study-agent catalog (subjects, chapters, sets, ingest).
     path('api/igcse/', include('igcse_catalog.urls')),

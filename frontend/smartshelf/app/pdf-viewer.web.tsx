@@ -10,22 +10,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { getBackendBaseUrl } from '@/services/api';
 import { useNowReadingStore } from '@/src/store/nowReading';
+import { buildPdfViewerSrc } from '@/src/lib/pdfViewerUrl';
 
-const PDF_JS_VIEWER = 'https://mozilla.github.io/pdf.js/web/viewer.html';
-
-function buildViewerUrl(pdfUrl: string): string {
-  const lower = pdfUrl.toLowerCase();
-  if (lower.startsWith('blob:') || lower.startsWith('data:')) {
-    return `${PDF_JS_VIEWER}?file=${encodeURIComponent(pdfUrl)}`;
-  }
-  const base = getBackendBaseUrl();
-  const proxy = `${base}/api/pdf-proxy/?url=${encodeURIComponent(pdfUrl)}`;
-  return `${PDF_JS_VIEWER}?file=${encodeURIComponent(proxy)}`;
-}
-
-/** Web/Electron PDF viewer — PDF.js iframe (no react-native-webview). */
+/** Web/Electron PDF viewer — same-origin PDF.js iframe. */
 export default function PdfViewerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -47,7 +35,7 @@ export default function PdfViewerScreen() {
     });
   }, [source, title]);
 
-  const viewerSrc = useMemo(() => (source ? buildViewerUrl(source) : ''), [source]);
+  const viewerSrc = useMemo(() => (source ? buildPdfViewerSrc(source) : ''), [source]);
 
   useEffect(() => {
     setReady(Boolean(viewerSrc));

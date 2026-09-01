@@ -7,19 +7,16 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, type Router } from 'expo-router';
-import { getBackendBaseUrl } from '@/services/api';
+import { buildPdfViewerSrc } from '@/src/lib/pdfViewerUrl';
 
 const DEFAULT_AUTH_URL = 'https://my-backend.com/auth';
-const PDF_JS_VIEWER = 'https://mozilla.github.io/pdf.js/web/viewer.html';
 
-function buildPdfProxyUrl(pdfUrl: string): string {
-  const base = getBackendBaseUrl();
-  return `${base}/api/pdf-proxy/?url=${encodeURIComponent(pdfUrl)}`;
+function buildPdfViewerFromUrl(pdfUrl: string): string {
+  return buildPdfViewerSrc(pdfUrl);
 }
 
 export function openPdfInWebView(router: Router, pdfUrl: string): void {
-  const proxyUrl = buildPdfProxyUrl(pdfUrl);
-  const viewerUrl = `${PDF_JS_VIEWER}?file=${encodeURIComponent(proxyUrl)}`;
+  const viewerUrl = buildPdfViewerFromUrl(pdfUrl);
   router.push({ pathname: '/in-app-auth-webview', params: { url: viewerUrl, pdfUrl } });
 }
 
@@ -28,20 +25,19 @@ function isPdfUrl(url: string): boolean {
 }
 
 function isPdfJsViewerUrl(url: string): boolean {
-  return url?.toLowerCase().includes('mozilla.github.io/pdf.js') ?? false;
+  const lower = url?.toLowerCase() ?? '';
+  return lower.includes('/pdf-viewer.html') || lower.includes('mozilla.github.io/pdf.js');
 }
 
 function buildDisplayUrl(urlParam: string | undefined, pdfUrlParam: string | undefined): string {
   const raw = urlParam?.trim() ?? '';
   if (!raw) return DEFAULT_AUTH_URL;
   if (isPdfUrl(raw)) {
-    const proxyUrl = buildPdfProxyUrl(raw);
-    return `${PDF_JS_VIEWER}?file=${encodeURIComponent(proxyUrl)}`;
+    return buildPdfViewerFromUrl(raw);
   }
   if (isPdfJsViewerUrl(raw)) return raw;
   if (pdfUrlParam && isPdfUrl(pdfUrlParam)) {
-    const proxyUrl = buildPdfProxyUrl(pdfUrlParam);
-    return `${PDF_JS_VIEWER}?file=${encodeURIComponent(proxyUrl)}`;
+    return buildPdfViewerFromUrl(pdfUrlParam);
   }
   return raw;
 }

@@ -135,7 +135,7 @@ export function PricingTiersModal({
             ))}
 
             <ThemedText style={[styles.footer, { color: mutedColor }]}>
-              smartshelf.ng · All prices subject to change. Payment integration coming soon.
+              smartshelf.ng · Secure checkout powered by Stripe.
             </ThemedText>
           </ScrollView>
         </View>

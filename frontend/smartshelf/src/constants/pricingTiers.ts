@@ -43,7 +43,7 @@ export const PRICING_TIERS: PricingTier[] = [
     ],
     icon: 'school',
     highlighted: true,
-    ctaLabel: 'Choose plan — coming soon',
+    ctaLabel: 'Choose plan',
   },
   {
     id: 'micro',
@@ -58,7 +58,7 @@ export const PRICING_TIERS: PricingTier[] = [
       'Built for low-income and exam-sprint learners',
     ],
     icon: 'payments',
-    ctaLabel: 'Browse chapters — coming soon',
+    ctaLabel: 'Rent a chapter',
   },
   {
     id: 'diaspora',
@@ -73,7 +73,7 @@ export const PRICING_TIERS: PricingTier[] = [
       'Same content as Nigerian student plans',
     ],
     icon: 'public',
-    ctaLabel: 'View diaspora plans — coming soon',
+    ctaLabel: 'View diaspora plans',
   },
   {
     id: 'institutional',

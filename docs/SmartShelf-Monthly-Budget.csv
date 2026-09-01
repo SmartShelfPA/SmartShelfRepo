@@ -1,0 +1,38 @@
+SmartShelf Monthly Budget (active paid services only),,,,,,
+"As of Sep 2026 — fill ""Actual Monthly (USD)"" from your invoices. Stripe is not integrated yet; fees are estimated when you turn payments on.",,,,,,
+,,,,,,
+Line Item,Category,Billing Type,Budget Monthly (USD),Actual Monthly (USD),Notes
+Render — Web Service (API),Hosting,Fixed monthly,7.00,,Starter tier; verify at dashboard.render.com. Free tier possible but sleeps on idle.
+Render — PostgreSQL,Database,Fixed monthly,7.00,,Starter tier; production DB for users/auth/content.
+Domain — smartshelflearn.com (+ related),Domains,Annual ÷ 12,3.50,,~$15–45/yr total depending how many domains you renew (smartshelf.ng smartshelf.app etc.).
+WordPress website hosting,Marketing site,Fixed monthly,15.00,,Site with Download buttons; shared/managed WP hosting estimate.
+Apple Developer Program,Mobile distribution,Annual ÷ 12,8.25,,$99/yr amortized; TestFlight / iOS builds.
+OpenAI API (practice explanations),AI features,Variable usage,15.00,,Only if OPENAI_API_KEY is active on Render; scales with explain-answer usage. Set $0 if disabled.
+Expo EAS Build,Mobile builds,Fixed monthly,0.00,,Free tier unless you are on Production ($99/mo) — update if you upgraded.
+GitHub (public repo + Releases),Code & desktop updates,Fixed monthly,0.00,,Public SmartShelfPA/SmartShelfRepo — no subscription needed.
+Gmail / Google SMTP,Email (password reset),Fixed monthly,0.00,,Free if using Gmail App Password; paid if SendGrid/SES.
+,,,,,,
+SUBTOTAL — fixed + estimated usage,,,55.75,,Sum of Budget Monthly column above (adjust OpenAI/Render to match invoices).
+,,,,,,
+STRIPE — platform fee (Standard plan),Payments,Fixed monthly,0.00,,No monthly fee on Stripe Standard.
+STRIPE — card processing (domestic US cards),Payments,Variable (% of revenue),2.90%,,Plus $0.30 per successful charge (US pricing; confirm for your Stripe country).
+STRIPE — international cards surcharge,Payments,Variable (% of revenue),+1.50%,,Extra on top of base rate for non-US cards (common for diaspora GBP/CAD/USD plans).
+STRIPE — Billing / subscriptions add-on,Payments,Variable (% of recurring),+0.50%,,Only if you use Stripe Billing for termly/annual subs (optional).
+STRIPE — failed/dispute fees,Payments,Per event,$15.00,,Per chargeback (only when disputes happen).
+,,,,,,
+STRIPE fee examples (monthly — fill when live),,,,,,
+Example: 50 student payments @ ₦5000 (~$3.30 each),Stripe variable,Estimated monthly,12.00,,~$165 gross × 2.9% + 50 × $0.30 ≈ $12 (before intl surcharge).
+Example: 200 student payments @ ₦5000 (~$3.30 each),Stripe variable,Estimated monthly,48.00,,~$660 gross × 2.9% + 200 × $0.30 ≈ $48.
+Example: 50 diaspora payments @ $9.99 USD each,Stripe variable,Estimated monthly,30.00,,~$500 gross × 2.9% + 50 × $0.30 ≈ $30.
+,,,,,,
+TOTAL — infra only (no Stripe),,,55.75,,Fixed stack before payment processing.
+TOTAL — infra + Stripe (200 payments example),,,103.75,,55.75 + ~48 Stripe fees — replace with your real volume.
+,,,,,,
+NOT included (not paying today),,,,,,
+Windows Authenticode certificate,,,0.00,,Not purchased; considering Microsoft Store instead.
+Microsoft Store developer registration,,,0.00,,Individual registration is free; no listing fee until published.
+Google Play Console,,,0.00,,Not paid until you register ($25 one-time).
+Cloudflare R2 / AWS S3,,,0.00,,Not configured; using GitHub Releases for desktop.
+Datadog synthetics,,,0.00,,Workflow disabled in repo.
+ngrok,,,0.00,,Dev-only tunnel; not production.
+ALOC Questions API,,,0.00,,Free API per vendor docs.

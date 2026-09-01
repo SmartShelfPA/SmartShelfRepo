@@ -10,23 +10,11 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { getBackendBaseUrl } from '@/services/api';
+import { buildPdfViewerSrc } from '@/src/lib/pdfViewerUrl';
 import { useBookLastPage } from '@/src/hooks/useBookLastPage';
 import { useNowReadingStore } from '@/src/store/nowReading';
 
-const PDF_JS_VIEWER = 'https://mozilla.github.io/pdf.js/web/viewer.html';
-
-function buildWebViewerUrl(pdfUrl: string, page: number): string {
-  const lower = pdfUrl.toLowerCase();
-  if (lower.startsWith('blob:') || lower.startsWith('data:')) {
-    return `${PDF_JS_VIEWER}?file=${encodeURIComponent(pdfUrl)}#page=${page}`;
-  }
-  const base = getBackendBaseUrl();
-  const proxy = `${base}/api/pdf-proxy/?url=${encodeURIComponent(pdfUrl)}`;
-  return `${PDF_JS_VIEWER}?file=${encodeURIComponent(proxy)}#page=${page}`;
-}
-
-/** Web/default PDF reader — uses PDF.js in an iframe (no react-native-pdf). */
+/** Web/default PDF reader — same-origin PDF.js viewer (works with blob: URLs in Electron). */
 export default function IgcsePdfReaderScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -70,7 +58,7 @@ export default function IgcsePdfReaderScreen() {
   }, [bookId, getLastPage]);
 
   const viewerSrc = useMemo(
-    () => (sourceUri ? buildWebViewerUrl(sourceUri, initialPage) : ''),
+    () => (sourceUri ? buildPdfViewerSrc(sourceUri, initialPage) : ''),
     [sourceUri, initialPage]
   );
 

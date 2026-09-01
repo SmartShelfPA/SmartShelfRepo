@@ -10,6 +10,7 @@ This is an evolved shell, not a second React app. If Expo web cannot carry a rea
 
 - Node.js 20+
 - From `frontend/smartshelf`: `npm install`
+- From `frontend/smartshelf/desktop`: `npm install` (pulls `electron-updater`; also run automatically by `desktop:build`)
 - **Windows builds:** run on Windows (or CI Windows runner)
 - **Mac builds / signing:** run on macOS (Apple Developer ID required for Gatekeeper)
 
@@ -49,9 +50,17 @@ cd frontend\smartshelf
 npm run desktop:build
 ```
 
-Output: `frontend/smartshelf/desktop-release/SmartShelf-Setup.exe`
+Output folder (outside OneDrive):
 
-The filename stays the same every release so WordPress can use a permanent link.
+`%LOCALAPPDATA%\SmartShelf\desktop-release\`
+
+Files to upload for each release:
+
+- `SmartShelf-Setup.exe` — installer (also used by the permanent website link)
+- `SmartShelf-Setup.exe.blockmap` — required for auto-update
+- `latest.yml` — required for auto-update
+
+Bump `desktop/package.json` `version` before every release (example: `1.0.0` → `1.0.1`). Auto-update compares that version to GitHub.
 
 ### Mac (`.dmg`)
 
@@ -62,7 +71,40 @@ cd frontend/smartshelf
 npm run desktop:build:mac
 ```
 
-Output: `frontend/smartshelf/desktop-release/SmartShelf.dmg`
+Output: `SmartShelf.dmg` (and related update metadata when configured)
+
+## Auto-update
+
+Packaged Windows builds check GitHub Releases a few seconds after launch (`electron-updater`).
+
+1. Bump `frontend/smartshelf/desktop/package.json` version.
+2. `npm run desktop:build`
+3. Create a new GitHub Release (`v1.0.1`, etc.).
+4. Upload **all three** Windows artifacts above (same filenames every time for the `.exe`).
+5. Installed apps download the update and offer **Restart now** / **Later**.
+
+People on an older build that never included the updater must install once manually from the website; after that, later versions update themselves.
+
+### Publish a new Windows build
+
+```powershell
+cd frontend\smartshelf
+# edit desktop/package.json version first
+npm run desktop:build
+gh release create v1.0.1 ^
+  "$env:LOCALAPPDATA\SmartShelf\desktop-release\SmartShelf-Setup.exe" ^
+  "$env:LOCALAPPDATA\SmartShelf\desktop-release\SmartShelf-Setup.exe.blockmap" ^
+  "$env:LOCALAPPDATA\SmartShelf\desktop-release\latest.yml" ^
+  --title "SmartShelf 1.0.1" --notes "Desktop update"
+```
+
+Use the same asset names every time (`SmartShelf-Setup.exe`, `SmartShelf.dmg`). GitHub `/releases/latest/download/...` only stays stable if the filename does not include a version number.
+
+### Unpackaged smoke test
+
+```powershell
+npm run desktop:build:dir
+```
 
 ## Permanent website download (WordPress)
 
@@ -88,21 +130,18 @@ DESKTOP_DOWNLOAD_MACOS_URL=https://downloads.smartshelflearn.com/SmartShelf.dmg
 
 WordPress still uses `/download/windows` — only the redirect target changes.
 
-### Publish a new Windows build
+## Reducing Windows Defender / Malwarebytes warnings
 
-```powershell
-cd frontend\smartshelf
-npm run desktop:build
-gh release create v1.0.1 "desktop-release/SmartShelf-Setup.exe" --title "SmartShelf 1.0.1" --notes "Desktop installer"
-```
+Unsigned Electron installers often trigger SmartScreen (“Windows protected your PC”) and third-party AV heuristics. The durable fix is reputation + signing:
 
-Use the same asset names every time (`SmartShelf-Setup.exe`, `SmartShelf.dmg`). GitHub `/releases/latest/download/...` only stays stable if the filename does not include a version number.`
+1. **Buy an Authenticode code-signing certificate** for your company (EV preferred; OV works). Vendors include DigiCert, Sectigo, SSL.com.
+2. **Sign every installer** before upload (electron-builder can do this with `CSC_LINK` / `CSC_KEY_PASSWORD`, or sign after build with `signtool`).
+3. **Always download from your permanent HTTPS link** (`smartshelf-api.onrender.com/download/windows`), not random mirrors or email attachments.
+4. **Keep the same app name, publisher, and `appId`** (`ca.com.smartshelf.desktop`) across releases so reputation accumulates.
+5. **Ship steadily** — Microsoft SmartScreen reputation grows with real installs over time; the first unsigned builds look the worst.
+6. Optional: submit false positives to [Microsoft](https://www.microsoft.com/wdsi/filesubmission) / Malwarebytes if a specific build is blocked after signing.
 
-### Unpackaged smoke test
-
-```powershell
-npm run desktop:build:dir
-```
+There is no free switch that makes Defender “trust” an unknown publisher overnight. Signing is the real solution; reputation does the rest.
 
 ## macOS signing & notarization
 
@@ -135,9 +174,11 @@ See [electron-builder code signing](https://www.electron.build/code-signing.html
 | Protected downloads | Electron `userData/protected_pdfs` (browser web still uses IndexedDB) |
 | Profile avatar | data URL in storage |
 | Haptics / orientation | no-op on web |
+| Auto-update | GitHub Releases via electron-updater (packaged builds) |
 
 ## Troubleshooting
 
 - **Blank Electron window in dev:** wait for Expo web to finish bundling; confirm `http://127.0.0.1:8081` loads in a browser.
 - **API errors:** desktop export bakes in `EXPO_PUBLIC_API_BASE_URL`; rebuild after changing it.
 - **Mac “app is damaged”:** unsigned build — right-click Open once, or sign/notarize for users.
+- **Auto-update never appears:** confirm `latest.yml` + `.blockmap` were uploaded, and installed app version is lower than the GitHub release version.

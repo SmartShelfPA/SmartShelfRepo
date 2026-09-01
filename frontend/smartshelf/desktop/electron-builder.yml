@@ -1,7 +1,7 @@
 appId: ca.com.smartshelf.desktop
 productName: SmartShelf
 copyright: Copyright © SmartShelf
-# Desktop package.json has no npm deps — do not rebuild / pack Expo node_modules.
+# Desktop package.json has no Expo deps — only electron-updater + shell files.
 electronVersion: 37.10.3
 npmRebuild: false
 nodeGypRebuild: false
@@ -14,9 +14,15 @@ files:
   - main.js
   - preload.js
   - downloadsStore.js
+  - autoUpdater.js
   - package.json
 extraMetadata:
   main: main.js
+publish:
+  provider: github
+  owner: SmartShelfPA
+  repo: SmartShelfRepo
+  releaseType: release
 extraResources:
   - from: ../dist
     to: web-dist

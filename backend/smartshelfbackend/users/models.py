@@ -180,6 +180,24 @@ class UserProfile(AbstractUser):
         ),
     )
 
+    # ── Stripe billing / subscriptions ─────────────────────────────────────
+    class SubscriptionStatus(models.TextChoices):
+        NONE = "none", "None"
+        ACTIVE = "active", "Active"
+        PAST_DUE = "past_due", "Past due"
+        CANCELED = "canceled", "Canceled"
+
+    subscription_tier = models.CharField(max_length=32, blank=True, default="")
+    subscription_plan_id = models.CharField(max_length=64, blank=True, default="")
+    subscription_status = models.CharField(
+        max_length=20,
+        choices=SubscriptionStatus.choices,
+        default=SubscriptionStatus.NONE,
+    )
+    subscription_active_until = models.DateTimeField(null=True, blank=True)
+    stripe_customer_id = models.CharField(max_length=255, blank=True, default="")
+    stripe_subscription_id = models.CharField(max_length=255, blank=True, default="")
+
     # ── Security / account-lockout ───────────────────────────────────────────
     failed_login_count = models.PositiveSmallIntegerField(
         default=0,
@@ -233,6 +251,14 @@ class UserProfile(AbstractUser):
     @property
     def has_accepted_policies(self) -> bool:
         return bool(self.terms_accepted_at and self.privacy_accepted_at)
+
+    @property
+    def has_active_subscription(self) -> bool:
+        if self.subscription_status != self.SubscriptionStatus.ACTIVE:
+            return False
+        if not self.subscription_active_until:
+            return True
+        return timezone.now() < self.subscription_active_until
 
     def record_policy_acceptance(
         self,

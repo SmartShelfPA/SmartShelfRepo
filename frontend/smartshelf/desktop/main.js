@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const { registerDownloadIpc } = require('./downloadsStore');
+const { setupAutoUpdater } = require('./autoUpdater');
 
 const isDev = !app.isPackaged;
 const DEV_URL = process.env.SMARTSHELF_DEV_URL || 'http://localhost:8081';
@@ -145,6 +146,7 @@ app.whenReady().then(() => {
   }
   registerDownloadIpc();
   void createWindow();
+  setupAutoUpdater();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       void createWindow();

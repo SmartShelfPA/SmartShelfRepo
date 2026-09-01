@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     'pdf_proxy',
     'learning',
     'igcse_catalog',
+    'billing',
 ]
 
 MIDDLEWARE = [
@@ -268,6 +269,18 @@ EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'true').lower() == 'true'
+
+# Stripe — server-side checkout for pricing tiers (never expose secret key to clients).
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', '')
+STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', '')
+STRIPE_CHECKOUT_SUCCESS_URL = os.getenv(
+    'STRIPE_CHECKOUT_SUCCESS_URL',
+    'smartshelf://billing/success?session_id={CHECKOUT_SESSION_ID}',
+)
+STRIPE_CHECKOUT_CANCEL_URL = os.getenv(
+    'STRIPE_CHECKOUT_CANCEL_URL',
+    'smartshelf://billing/cancel',
+)
 
 # Logging configuration
 LOGGING = {

@@ -11,9 +11,9 @@
     "lint": "expo lint",
     "desktop:dev": "concurrently -k -n expo,electron -c green,blue \"cross-env EXPO_PUBLIC_API_BASE_URL=https://smartshelf-api.onrender.com/api expo start --web --port 8081 --clear\" \"wait-on http://127.0.0.1:8081 && electron desktop/main.js\"",
     "desktop:export": "cross-env EXPO_PUBLIC_API_BASE_URL=https://smartshelf-api.onrender.com/api expo export --platform web",
-    "desktop:build": "npm run desktop:export && node desktop/build-win.js",
-    "desktop:build:mac": "npm run desktop:export && electron-builder --mac --projectDir desktop --config desktop/electron-builder.yml",
-    "desktop:build:dir": "npm run desktop:export && electron-builder --dir --projectDir desktop --config desktop/electron-builder.yml"
+    "desktop:build": "npm run desktop:export && npm --prefix desktop install && node desktop/build-win.js",
+    "desktop:build:mac": "npm run desktop:export && npm --prefix desktop install && electron-builder --mac --projectDir desktop --config desktop/electron-builder.yml",
+    "desktop:build:dir": "npm run desktop:export && npm --prefix desktop install && electron-builder --dir --projectDir desktop --config desktop/electron-builder.yml"
   },
   "dependencies": {
     "@config-plugins/react-native-blob-util": "^12.0.0",

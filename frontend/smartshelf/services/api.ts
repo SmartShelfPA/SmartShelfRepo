@@ -164,6 +164,11 @@ export type UserProfile = {
   analytics_consent_at?: string | null;
   // Phase 2 school governance
   school_managed?: boolean;
+  subscription_tier?: string;
+  subscription_plan_id?: string;
+  subscription_status?: string;
+  subscription_active_until?: string | null;
+  has_active_subscription?: boolean;
 };
 
 let sessionToken: string | null = null;

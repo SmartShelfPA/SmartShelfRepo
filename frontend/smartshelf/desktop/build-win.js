@@ -52,5 +52,16 @@ if (!fs.existsSync(exe)) {
   process.exit(1);
 }
 
+const latestYml = path.join(outDir, "latest.yml");
+const blockmap = `${exe}.blockmap`;
+
 console.log("\nInstaller ready:");
 console.log("  " + exe);
+if (fs.existsSync(latestYml)) {
+  console.log("  " + latestYml);
+}
+if (fs.existsSync(blockmap)) {
+  console.log("  " + blockmap);
+}
+console.log("\nFor auto-update, upload ALL of the above files to the GitHub Release.");
+console.log("Also bump desktop/package.json version before each release.");

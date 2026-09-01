@@ -3,7 +3,7 @@
     "name": "SmartShelf",
     "slug": "smartshelf",
     "owner": "smartshelfkc",
-    "version": "1.0.0",
+    "version": "1.0.3",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "smartshelf",
@@ -27,6 +27,7 @@
     },
     "android": {
       "package": "ca.com.smartshelf.app",
+      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#000000",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
