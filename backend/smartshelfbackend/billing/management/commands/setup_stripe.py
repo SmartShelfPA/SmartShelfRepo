@@ -75,11 +75,19 @@ def _catalog_specs() -> list[CatalogSpec]:
     return specs
 
 
+def _metadata_value(metadata, key: str) -> str | None:
+    if not metadata:
+        return None
+    try:
+        return metadata[key]
+    except (KeyError, TypeError):
+        return getattr(metadata, key, None)
+
+
 def _find_product(plan_id: str) -> stripe.Product | None:
     products = stripe.Product.list(limit=100, active=True)
     for product in products.auto_paging_iter():
-        metadata = product.get("metadata") or {}
-        if metadata.get("smartshelf_plan_id") == plan_id:
+        if _metadata_value(product.metadata, "smartshelf_plan_id") == plan_id:
             return product
     return None
 
@@ -87,11 +95,11 @@ def _find_product(plan_id: str) -> stripe.Product | None:
 def _find_price(product_id: str, *, currency: str, amount: int, recurring: bool) -> stripe.Price | None:
     prices = stripe.Price.list(product=product_id, limit=100, active=True)
     for price in prices.auto_paging_iter():
-        if price.get("currency") != currency:
+        if price.currency != currency:
             continue
-        if price.get("unit_amount") != amount:
+        if price.unit_amount != amount:
             continue
-        is_recurring = bool(price.get("recurring"))
+        is_recurring = bool(price.recurring)
         if is_recurring != recurring:
             continue
         return price
@@ -129,7 +137,7 @@ def _ensure_price(product: stripe.Product, spec: CatalogSpec) -> stripe.Price:
 def _ensure_webhook(url: str) -> stripe.WebhookEndpoint:
     endpoints = stripe.WebhookEndpoint.list(limit=100)
     for endpoint in endpoints.auto_paging_iter():
-        if endpoint.get("url") == url:
+        if endpoint.url == url:
             return endpoint
     return stripe.WebhookEndpoint.create(url=url, enabled_events=WEBHOOK_EVENTS)
 
