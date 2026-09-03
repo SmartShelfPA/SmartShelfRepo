@@ -1,12 +1,13 @@
 import { StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Href } from 'expo-router';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { ThemedView } from '@/components/themed-view';
 import { HomeHeader } from '@/components/home-header';
 import { StreakBadge } from '@/components/streak-badge';
+import { PlanStatusBadge } from '@/components/plan-status-badge';
 import { ThemedText } from '@/components/themed-text';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useAuthStore } from '@/src/store/auth';
@@ -22,6 +23,8 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const refreshProfile = useAuthStore((s) => s.refreshProfile);
   const { avatarUri, userInitials } = useProfileAvatar();
   const colorScheme = useColorScheme();
   const cardBgColor = colorScheme === 'dark' ? '#1F1F1F' : '#FFFFFF';
@@ -37,6 +40,13 @@ export default function HomeScreen() {
     useDashboardData();
   const streakDays = useStreak(dashboard?.recentSessions ?? []);
   const desktop = useIsDesktopLayout();
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isAuthenticated) return;
+      void refreshProfile();
+    }, [isAuthenticated, refreshProfile])
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -106,6 +116,12 @@ export default function HomeScreen() {
               {cursorVisible ? '|' : ' '}
             </ThemedText>
           </ThemedText>
+
+          <PlanStatusBadge
+            planId={user?.subscription_plan_id}
+            tier={user?.subscription_tier}
+            hasActive={Boolean(user?.has_active_subscription)}
+          />
 
           {desktop ? <ContinueReadingSection dashboard={dashboard} /> : null}
 
@@ -193,7 +209,7 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '600',
     marginTop: 8,
-    marginBottom: 12,
+    marginBottom: 8,
     lineHeight: 36,
     textAlign: 'center',
     width: '100%',

@@ -3,7 +3,7 @@
   "private": true,
   "main": "main.js",
   "productName": "SmartShelf",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "author": "SmartShelf",
   "description": "SmartShelf desktop shell (Electron)",
   "dependencies": {
