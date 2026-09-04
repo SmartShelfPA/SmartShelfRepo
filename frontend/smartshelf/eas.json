@@ -19,6 +19,7 @@
     },
     "production": {
       "autoIncrement": true,
+      "credentialsSource": "local",
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "https://smartshelf-api.onrender.com/api"
       }
