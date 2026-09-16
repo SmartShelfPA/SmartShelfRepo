@@ -106,7 +106,7 @@ Use the same asset names every time (`SmartShelf-Setup.exe`, `SmartShelf.dmg`). 
 npm run desktop:build:dir
 ```
 
-## Permanent website download (WordPress)
+## Permanent website download (WordPress / Microsoft Store)
 
 Do **not** upload the `.exe` into WordPress (file-type blocks, size limits, malware scanners). Put a Download button on the site that points at these URLs:
 
@@ -116,19 +116,16 @@ Do **not** upload the `.exe` into WordPress (file-type blocks, size limits, malw
 | Mac | `https://smartshelf-api.onrender.com/download/macos` |
 | Chooser page | `https://smartshelf-api.onrender.com/download/` |
 
-Those URLs never change. They redirect to the latest GitHub Release asset:
+Those URLs never change. They return **HTTP 200** and stream the installer (no client redirect). The API fetches the GitHub release asset server-side and caches it. Use the Windows URL as the Microsoft Partner Center **Package URL**.
 
-- `https://github.com/SmartShelfPA/SmartShelfRepo/releases/latest/download/SmartShelf-Setup.exe`
-- `https://github.com/SmartShelfPA/SmartShelfRepo/releases/latest/download/SmartShelf.dmg`
-
-**The GitHub repo must be public** (or the release assets public) for visitors to download. If the repo stays private, host the two files on Cloudflare R2 / S3 and set Render env vars:
+Upstream source (optional Render env overrides):
 
 ```env
-DESKTOP_DOWNLOAD_WINDOWS_URL=https://downloads.smartshelflearn.com/SmartShelf-Setup.exe
-DESKTOP_DOWNLOAD_MACOS_URL=https://downloads.smartshelflearn.com/SmartShelf.dmg
+DESKTOP_DOWNLOAD_WINDOWS_URL=https://github.com/SmartShelfPA/SmartShelfRepo/releases/latest/download/SmartShelf-Setup.exe
+DESKTOP_DOWNLOAD_MACOS_URL=https://github.com/SmartShelfPA/SmartShelfRepo/releases/latest/download/SmartShelf.dmg
 ```
 
-WordPress still uses `/download/windows` — only the redirect target changes.
+**The GitHub repo must be public** (or the release assets public) for the API to fetch them. If the repo stays private, host the two files on Cloudflare R2 / S3 and set those env vars to direct object URLs instead.
 
 ## Reducing Windows Defender / Malwarebytes warnings
 
