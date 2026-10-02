@@ -3,7 +3,7 @@
     "name": "SmartShelf",
     "slug": "smartshelf",
     "owner": "smartshelfkc",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "smartshelf",
@@ -11,6 +11,7 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "ca.com.smartshelf.app",
+      "buildNumber": "8",
       "supportsTablet": true,
       "infoPlist": {
         "NSAppTransportSecurity": {
@@ -22,12 +23,13 @@
             }
           }
         },
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "SmartShelf uses your photo library only when you choose a profile picture. For example, you can pick a photo of yourself to show on your Profile tab. The photo is saved on this device and is not shared with other users."
       }
     },
     "android": {
       "package": "ca.com.smartshelf.app",
-      "versionCode": 3,
+      "versionCode": 12,
       "adaptiveIcon": {
         "backgroundColor": "#000000",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -87,7 +89,15 @@
       "expo-router",
       "expo-web-browser",
       "expo-asset",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SmartShelf uses your photo library only when you choose a profile picture. For example, you can pick a photo of yourself to show on your Profile tab. The photo is saved on this device and is not shared with other users.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

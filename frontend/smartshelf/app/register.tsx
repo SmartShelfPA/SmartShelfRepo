@@ -212,7 +212,7 @@ export default function RegisterScreen() {
     next.email = validateSimpleField('email', formData.email);
     next.password = validateSimpleField('password', formData.password);
 
-    next.dateOfBirth = validateDateOfBirth(dateOfBirth, true);
+    next.dateOfBirth = validateDateOfBirth(dateOfBirth, false);
     if (!studentClass.trim()) {
       next.studentClass = 'Class is required for students';
     }
@@ -403,7 +403,7 @@ export default function RegisterScreen() {
             {renderOrgPicker()}
 
             <ThemedView style={styles.inputContainer}>
-              <ThemedText style={styles.label}>Date of birth</ThemedText>
+              <ThemedText style={styles.label}>Date of birth (optional)</ThemedText>
               <ThemedTextInput
                 style={[styles.input, errors.dateOfBirth && styles.inputError]}
                 placeholder="YYYY-MM-DD"
@@ -421,7 +421,9 @@ export default function RegisterScreen() {
               {errors.dateOfBirth ? (
                 <ThemedText style={styles.errorText}>{errors.dateOfBirth}</ThemedText>
               ) : (
-                <ThemedText style={styles.helperText}>Example: 2008-03-21</ThemedText>
+                <ThemedText style={styles.helperText}>
+                  You can leave this blank. Example: 2008-03-21
+                </ThemedText>
               )}
             </ThemedView>
 
