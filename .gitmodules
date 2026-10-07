@@ -1,0 +1,3 @@
+[submodule "aloc-endpoints"]
+	url = https://github.com/SmartShelfPA/aloc-endpoints.git
+	branch = smartshelf
