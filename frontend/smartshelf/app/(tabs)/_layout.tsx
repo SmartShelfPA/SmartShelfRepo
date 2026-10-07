@@ -7,10 +7,10 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useIsDesktopLayout } from '@/src/lib/desktop';
-import { useRequireAuth } from '@/src/hooks/useRequireAuth';
+import { useRequireRole } from '@/src/hooks/useRequireRole';
 
 export default function TabLayout() {
-  useRequireAuth();
+  useRequireRole(['student', 'publisher']);
   const colorScheme = useColorScheme();
   const desktop = useIsDesktopLayout();
 

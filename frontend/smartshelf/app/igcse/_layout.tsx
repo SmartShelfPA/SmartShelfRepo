@@ -14,6 +14,7 @@ export default function IgcsLayout() {
       <Stack.Screen name="book/[id]" />
       <Stack.Screen name="reader/[id]" />
       <Stack.Screen name="pdf-reader" />
+      <Stack.Screen name="annotate" options={{ gestureEnabled: false }} />
     </Stack>
   );
 }

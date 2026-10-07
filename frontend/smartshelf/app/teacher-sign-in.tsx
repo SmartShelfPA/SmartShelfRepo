@@ -21,6 +21,7 @@ import { ThemedTextInput } from '@/components/themed-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getStayLoggedInPreference } from '@/services/api';
 import { useAuthStore } from '@/src/store/auth';
+import { WrongPortalLink, wrongPortalRole } from '@/src/components/WrongPortalLink';
 
 export default function TeacherSignInScreen() {
   const [username, setUsername] = useState('');
@@ -28,6 +29,7 @@ export default function TeacherSignInScreen() {
   const [stayLoggedIn, setStayLoggedIn] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [portalRole, setPortalRole] = useState<string | null>(null);
 
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -61,9 +63,10 @@ export default function TeacherSignInScreen() {
       return;
     }
     setError(null);
+    setPortalRole(null);
     setIsLoading(true);
     try {
-      await signIn(username.trim(), password, { stayLoggedIn });
+      await signIn(username.trim(), password, { stayLoggedIn, portal: 'staff' });
       const role = useAuthStore.getState().user?.role;
       if (role !== 'staff') {
         await useAuthStore.getState().signOut();
@@ -74,6 +77,7 @@ export default function TeacherSignInScreen() {
       }
       router.replace(getHomeRoute());
     } catch (e: unknown) {
+      setPortalRole(wrongPortalRole(e));
       setError(e instanceof Error ? e.message : 'Sign in failed');
     } finally {
       setIsLoading(false);
@@ -145,6 +149,7 @@ export default function TeacherSignInScreen() {
             />
           </View>
           {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+          {error ? <WrongPortalLink role={portalRole} /> : null}
           <TouchableOpacity
             style={[styles.button, { backgroundColor: buttonBgColor }]}
             onPress={handleSignIn}

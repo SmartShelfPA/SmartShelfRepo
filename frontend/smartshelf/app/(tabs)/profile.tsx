@@ -151,6 +151,11 @@ export default function ProfileScreen() {
               action: () => router.push('/privacy-data'),
               icon: 'tune' as const,
             },
+            {
+              label: 'Help & Feedback',
+              action: () => router.push('/feedback'),
+              icon: 'support-agent' as const,
+            },
           ].map((item) => (
             <TouchableOpacity
               key={item.label}

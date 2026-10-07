@@ -37,6 +37,8 @@ urlpatterns = [
     path('api/pdf-proxy/', include('pdf_proxy.urls')),
     path('api/v1/auth/', include('auth.urls')),
     path('api/v1/', include('users.urls')),
+    path('api/v1/', include('classroom.urls')),
+    path('api/v1/support/', include('support.urls')),
     # IGCSE EPUB reader + annotations (authenticated).
     path('api/v1/igcse/', include('learning.igcse_urls')),
     path('api/v1/practice/', include('learning.practice_urls')),

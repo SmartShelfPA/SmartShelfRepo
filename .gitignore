@@ -208,3 +208,6 @@ store-assets/tablet-screenshots/*.apk
 .mypy_cache/
 .ruff_cache/
 
+
+# Google service account key
+pc-key.json

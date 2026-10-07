@@ -37,6 +37,10 @@ export default function RootLayout() {
           <Stack.Screen name="teacher-sign-in" options={{ headerShown: false }} />
           <Stack.Screen name="parent" options={{ headerShown: false }} />
           <Stack.Screen name="teacher" options={{ headerShown: false }} />
+          <Stack.Screen name="staff" options={{ headerShown: false }} />
+          <Stack.Screen name="school" options={{ headerShown: false }} />
+          <Stack.Screen name="assignments" options={{ headerShown: false }} />
+          <Stack.Screen name="feedback" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="book/[id]" options={{ headerShown: false }} />
           <Stack.Screen name="subject-textbooks" options={{ headerShown: false }} />

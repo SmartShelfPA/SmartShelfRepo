@@ -36,7 +36,7 @@ import {
 const COPPA_AGE_GATE = 13;
 
 type SimpleField = 'name' | 'username' | 'email' | 'password';
-type ExtraField = 'dateOfBirth' | 'organization' | 'studentClass';
+type ExtraField = 'dateOfBirth' | 'organization' | 'studentClass' | 'schoolCode';
 
 type FormErrors = Record<SimpleField | ExtraField, string | null>;
 
@@ -48,6 +48,7 @@ const emptyErrors = (): FormErrors => ({
   dateOfBirth: null,
   organization: null,
   studentClass: null,
+  schoolCode: null,
 });
 
 function validateDateOfBirth(value: string, required: boolean): string | null {
@@ -85,6 +86,7 @@ export default function RegisterScreen() {
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [studentClass, setStudentClass] = useState('');
   const [selectedOrgSlug, setSelectedOrgSlug] = useState<string | null>(null);
+  const [schoolCode, setSchoolCode] = useState('');
 
   // Consent state
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -150,10 +152,9 @@ export default function RegisterScreen() {
   const buttonBgColor = '#00FF41';
   const buttonTextColor = '#FFFFFF';
 
-  const selectedOrgName = (() => {
-    const org = organizations.find((o) => o.slug === selectedOrgSlug);
-    return org ? displaySchoolName(org) : null;
-  })();
+  const selectedOrg = organizations.find((o) => o.slug === selectedOrgSlug) ?? null;
+  const selectedOrgName = selectedOrg ? displaySchoolName(selectedOrg) : null;
+  const needsSchoolCode = Boolean(selectedOrg?.requires_join_code);
 
   const filteredOrganizations = organizations.filter((org) => {
     const q = orgQuery.trim().toLowerCase();
@@ -220,9 +221,12 @@ export default function RegisterScreen() {
     if (!selectedOrgSlug) {
       next.organization = 'Select your school or university';
     }
+    if (needsSchoolCode && !schoolCode.trim()) {
+      next.schoolCode = 'Enter the school code from your teacher';
+    }
 
     return next;
-  }, [formData, dateOfBirth, studentClass, selectedOrgSlug]);
+  }, [formData, dateOfBirth, studentClass, selectedOrgSlug, needsSchoolCode, schoolCode]);
 
   const handleSubmit = async () => {
     const newErrors = validateAll();
@@ -261,6 +265,7 @@ export default function RegisterScreen() {
         date_of_birth: dateOfBirth.trim() || null,
         student_class: studentClass.trim(),
         organization_slug: selectedOrgSlug ?? undefined,
+        school_code: needsSchoolCode ? schoolCode.trim() : undefined,
         terms_accepted: true,
         analytics_consent: analyticsConsent,
       });
@@ -401,6 +406,32 @@ export default function RegisterScreen() {
 
           <ThemedView style={styles.form}>
             {renderOrgPicker()}
+
+            {needsSchoolCode ? (
+              <ThemedView style={styles.inputContainer}>
+                <ThemedText style={styles.label}>School code</ThemedText>
+                <ThemedTextInput
+                  style={[styles.input, errors.schoolCode && styles.inputError]}
+                  placeholder="e.g. MH7K2Q"
+                  value={schoolCode}
+                  onChangeText={(t) => {
+                    setSchoolCode(t.toUpperCase());
+                    setErrors((e) => (e.schoolCode ? { ...e, schoolCode: null } : e));
+                    setRegisterError(null);
+                  }}
+                  editable={!isLoading}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                />
+                {errors.schoolCode ? (
+                  <ThemedText style={styles.errorText}>{errors.schoolCode}</ThemedText>
+                ) : (
+                  <ThemedText style={styles.helperText}>
+                    Your school gives this code to its students. Ask your teacher if you don&apos;t have it.
+                  </ThemedText>
+                )}
+              </ThemedView>
+            ) : null}
 
             <ThemedView style={styles.inputContainer}>
               <ThemedText style={styles.label}>Date of birth (optional)</ThemedText>

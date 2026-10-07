@@ -13,9 +13,14 @@ from .models import (
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
+    requires_join_code = serializers.SerializerMethodField()
+
     class Meta:
         model = Organization
-        fields = ("id", "name", "slug", "address", "created_at")
+        fields = ("id", "name", "slug", "address", "created_at", "requires_join_code")
+
+    def get_requires_join_code(self, obj) -> bool:
+        return bool((obj.join_code or "").strip())
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -40,6 +45,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "avatar_url",
             "staff_role",
             "staff_department",
+            "is_school_admin",
             "organization",
             "managed_student_ids",
             # Compliance / consent
@@ -59,7 +65,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "has_active_subscription",
         )
         read_only_fields = (
-            "id", "terms_accepted_at", "terms_version", "privacy_accepted_at",
+            "id", "role", "organization", "is_school_admin", "terms_accepted_at", "terms_version", "privacy_accepted_at",
             "privacy_version", "analytics_consent_at", "school_managed",
             "has_accepted_policies", "is_minor_account",
             "subscription_tier", "subscription_plan_id", "subscription_status",

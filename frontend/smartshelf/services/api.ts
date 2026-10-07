@@ -121,7 +121,12 @@ export type SchoolOrganization = {
   slug: string;
   address: string;
   created_at: string;
+  /** Students must enter the school's join code to register. */
+  requires_join_code?: boolean;
 };
+
+/** Sign-in screen the user came from; the backend refuses accounts of another role. */
+export type LoginPortal = 'student' | 'parent' | 'staff';
 
 export type RegisterPayload = {
   full_name: string;
@@ -137,6 +142,7 @@ export type RegisterPayload = {
   staff_department?: string;
   company_name?: string;
   contact_email?: string;
+  school_code?: string;
   /** Required by backend — must be true to create an account. */
   terms_accepted?: boolean;
   /** Optional analytics opt-in. */
@@ -154,6 +160,8 @@ export type UserProfile = {
   avatar_url?: string;
   staff_role?: string;
   staff_department?: string;
+  is_school_admin?: boolean;
+  organization?: SchoolOrganization | null;
   managed_student_ids?: string[];
   // Phase 1 compliance fields
   terms_accepted_at?: string | null;
@@ -386,14 +394,14 @@ export const validateToken = async (): Promise<boolean> => {
 export const login = async (
   username: string,
   password: string,
-  options: PersistSessionOptions = {}
+  options: PersistSessionOptions & { portal?: LoginPortal } = {}
 ) => {
   console.log('[API] Login request initiated for username:', username);
   
   try {
     const response = await apiRequest('/auth/login/', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, portal: options.portal ?? '' }),
       timeoutMs: AUTH_REQUEST_TIMEOUT_MS,
     });
 
@@ -413,6 +421,14 @@ export const login = async (
         err.code = 'account_locked';
         err.locked_until =
           typeof data.locked_until === 'string' ? data.locked_until : null;
+        throw err;
+      }
+      if (data.error === 'wrong_portal') {
+        const err = new Error(
+          (typeof data.message === 'string' && data.message) || 'Use the correct sign-in screen.'
+        ) as Error & { code: string; role: string | null };
+        err.code = 'wrong_portal';
+        err.role = typeof data.role === 'string' ? data.role : null;
         throw err;
       }
       const message =
@@ -559,6 +575,7 @@ export const register = async (
     body.linked_student_username = payload.linked_student_username?.trim() ?? '';
     body.staff_role = payload.staff_role?.trim() ?? '';
     body.staff_department = payload.staff_department?.trim() ?? '';
+    body.school_code = payload.school_code?.trim() ?? '';
   }
 
   try {

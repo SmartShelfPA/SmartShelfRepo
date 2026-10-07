@@ -441,6 +441,21 @@ class ProtectedPdfAsset(models.Model):
         default=1,
         help_text="Increment to force clients to re-authorize cached copies.",
     )
+    audience_classes = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "School resources only: list of class names (e.g. ['SS2A']) that may see this "
+            "file. Empty = every student in the organization."
+        ),
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="uploaded_protected_pdfs",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -452,6 +467,16 @@ class ProtectedPdfAsset(models.Model):
         indexes = [
             models.Index(fields=["published", "rights_status"], name="learning_pr_publish_idx"),
         ]
+
+    @property
+    def is_school_resource(self) -> bool:
+        return self.organization_id is not None and self.uploaded_by_id is not None
+
+    def audience_allows(self, user) -> bool:
+        classes = [c.strip().lower() for c in (self.audience_classes or []) if str(c).strip()]
+        if not classes or getattr(user, "role", "") != "student":
+            return True
+        return (getattr(user, "student_class", "") or "").strip().lower() in classes
 
     def __str__(self) -> str:
         return self.title
@@ -482,6 +507,8 @@ class ProtectedPdfAsset(models.Model):
         # Organization scoping: null org = global; otherwise must match.
         if self.organization_id is not None:
             if getattr(user, "organization_id", None) != self.organization_id:
+                return False
+            if not self.audience_allows(user):
                 return False
 
         return True
@@ -520,3 +547,55 @@ class ProtectedPdfAccessLog(models.Model):
 
     def __str__(self) -> str:
         return f"{self.get_event_display()} · {self.asset_id} · {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class StoredFile(models.Model):
+    """File bytes kept in Postgres for hosts without a persistent disk (e.g. Render)."""
+
+    name = models.CharField(max_length=255, unique=True)
+    content = models.BinaryField()
+    size = models.PositiveBigIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class PdfAnnotation(models.Model):
+    """A student's pen stroke, highlighter stroke or sticky note on a protected PDF page.
+
+    Coordinates are normalised to the page (0..1 on both axes) so the same
+    annotation lines up on phones, tablets and desktop regardless of zoom.
+    """
+
+    class Kind(models.TextChoices):
+        PEN = "pen", "Pen"
+        HIGHLIGHT = "highlight", "Highlighter"
+        NOTE = "note", "Sticky note"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="pdf_annotations"
+    )
+    asset = models.ForeignKey(
+        ProtectedPdfAsset, on_delete=models.CASCADE, related_name="annotations"
+    )
+    page = models.PositiveIntegerField()
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    color = models.CharField(max_length=16, default="#FFEB3B")
+    width = models.FloatField(default=0.004, help_text="Stroke width as a fraction of page width.")
+    points = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Pen/highlight: [[x, y], ...] normalised 0..1. Note: [[x, y]] anchor.",
+    )
+    text = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["page", "created_at"]
+        indexes = [models.Index(fields=["user", "asset"], name="learning_pdfann_user_asset")]
+
+    def __str__(self) -> str:
+        return f"{self.kind} p{self.page} · {self.asset_id}"

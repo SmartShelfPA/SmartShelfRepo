@@ -30,7 +30,7 @@ class OrganizationAdmin(admin.ModelAdmin):
     search_fields = ("name", "slug", "privacy_contact_email")
     readonly_fields = ("id", "created_at")
     fieldsets = (
-        (None, {"fields": ("id", "name", "slug", "address", "created_at")}),
+        (None, {"fields": ("id", "name", "slug", "address", "join_code", "created_at")}),
         (
             "School / Institutional Governance",
             {
@@ -77,9 +77,11 @@ class UserProfileAdmin(DjangoUserAdmin):
                     "role",
                     "full_name",
                     "date_of_birth",
+                    "student_class",
                     "avatar_url",
                     "staff_role",
                     "staff_department",
+                    "is_school_admin",
                     "managed_students",
                     "school_managed",
                 )

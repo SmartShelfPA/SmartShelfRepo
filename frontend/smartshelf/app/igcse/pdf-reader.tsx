@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,10 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { buildPdfViewerSrc } from '@/src/lib/pdfViewerUrl';
 import { useBookLastPage } from '@/src/hooks/useBookLastPage';
 import { useNowReadingStore } from '@/src/store/nowReading';
+import { useAuthStore } from '@/src/store/auth';
+import { usePdfAnnotationBridge } from '@/src/hooks/usePdfAnnotationBridge';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Web/default PDF reader — same-origin PDF.js viewer (works with blob: URLs in Electron). */
 export default function IgcsePdfReaderScreen() {
@@ -28,9 +32,20 @@ export default function IgcsePdfReaderScreen() {
     title?: string;
   }>();
 
-  const { getLastPage } = useBookLastPage(bookId ?? '');
+  const { getLastPage, saveLastPage } = useBookLastPage(bookId ?? '');
   const [initialPage, setInitialPage] = useState(1);
   const [ready, setReady] = useState(false);
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const annotationsEnabled = isAuthenticated && !!bookId && UUID_RE.test(String(bookId));
+
+  const handlePage = useCallback(
+    (page: number) => {
+      if (bookId) void saveLastPage(page);
+    },
+    [bookId, saveLastPage]
+  );
+  usePdfAnnotationBridge(frameRef, annotationsEnabled ? String(bookId) : undefined, handlePage);
 
   const sourceUri = (localUri as string) || (url as string) || '';
 
@@ -58,8 +73,9 @@ export default function IgcsePdfReaderScreen() {
   }, [bookId, getLastPage]);
 
   const viewerSrc = useMemo(
-    () => (sourceUri ? buildPdfViewerSrc(sourceUri, initialPage) : ''),
-    [sourceUri, initialPage]
+    () =>
+      sourceUri ? buildPdfViewerSrc(sourceUri, initialPage, { annotations: annotationsEnabled }) : '',
+    [sourceUri, initialPage, annotationsEnabled]
   );
 
   if (!sourceUri) {
@@ -91,7 +107,7 @@ export default function IgcsePdfReaderScreen() {
 
       <View style={styles.frameWrap}>
         {ready ? (
-          <iframe src={viewerSrc} title={title ?? 'PDF'} style={styles.frame} />
+          <iframe ref={frameRef} src={viewerSrc} title={title ?? 'PDF'} style={styles.frame} />
         ) : (
           <View style={[styles.center, { backgroundColor: bgColor }]}>
             <ActivityIndicator size="large" color="#00FF41" />

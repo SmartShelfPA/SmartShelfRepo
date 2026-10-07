@@ -20,6 +20,7 @@ import { ThemedTextInput } from '@/components/themed-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getStayLoggedInPreference } from '@/services/api';
 import { useAuthStore } from '@/src/store/auth';
+import { WrongPortalLink, wrongPortalRole } from '@/src/components/WrongPortalLink';
 
 export default function ParentSignInScreen() {
   const [username, setUsername] = useState('');
@@ -27,6 +28,7 @@ export default function ParentSignInScreen() {
   const [stayLoggedIn, setStayLoggedIn] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [portalRole, setPortalRole] = useState<string | null>(null);
 
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -59,9 +61,10 @@ export default function ParentSignInScreen() {
       return;
     }
     setError(null);
+    setPortalRole(null);
     setIsLoading(true);
     try {
-      await signIn(username.trim(), password, { stayLoggedIn });
+      await signIn(username.trim(), password, { stayLoggedIn, portal: 'parent' });
       const role = useAuthStore.getState().user?.role;
       if (role !== 'parent') {
         await signOut();
@@ -70,6 +73,7 @@ export default function ParentSignInScreen() {
       }
       router.replace(getHomeRoute());
     } catch (e: unknown) {
+      setPortalRole(wrongPortalRole(e));
       setError(e instanceof Error ? e.message : 'Sign in failed');
     } finally {
       setIsLoading(false);
@@ -114,6 +118,7 @@ export default function ParentSignInScreen() {
             <Switch value={stayLoggedIn} onValueChange={setStayLoggedIn} trackColor={{ true: '#00FF41' }} />
           </View>
           {error ? <ThemedText style={styles.error}>{error}</ThemedText> : null}
+          {error ? <WrongPortalLink role={portalRole} /> : null}
           <TouchableOpacity
             style={[styles.button, { backgroundColor: buttonBgColor }]}
             onPress={handleSignIn}

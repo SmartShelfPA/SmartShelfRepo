@@ -11,6 +11,7 @@ import {
   removeToken,
   setStoredProfile,
   validateToken,
+  type LoginPortal,
   type RegisterPayload,
   UserProfile,
 } from '@/services/api';
@@ -30,7 +31,11 @@ type AuthState = {
   isAuthenticated: boolean;
   initialize: () => Promise<void>;
   choosePortal: (choice: PortalChoice) => Promise<void>;
-  signIn: (username: string, password: string, options?: { stayLoggedIn?: boolean }) => Promise<void>;
+  signIn: (
+    username: string,
+    password: string,
+    options?: { stayLoggedIn?: boolean; portal?: LoginPortal }
+  ) => Promise<void>;
   signUp: (payload: RegisterPayload) => Promise<void>;
   refreshProfile: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -100,7 +105,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signIn: async (username, password, options) => {
     const persist = options?.stayLoggedIn !== false;
-    const result = await login(username, password, { persist });
+    const result = await login(username, password, { persist, portal: options?.portal });
     const token = result?.token ?? (await getToken());
     const user = result?.user ?? (await getStoredProfile());
     set({ token, user, isAuthenticated: true });

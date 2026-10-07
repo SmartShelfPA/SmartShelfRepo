@@ -40,6 +40,14 @@ class Organization(models.Model):
         max_length=100, blank=True,
         help_text="Region/country where this org's data is primarily stored (for disclosure purposes).",
     )
+    join_code = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text=(
+            "When set, students must enter this code to register under this school. "
+            "Keeps school-only resources away from students who merely pick the school name."
+        ),
+    )
 
     class Meta:
         ordering = ["name"]
@@ -129,6 +137,10 @@ class UserProfile(AbstractUser):
     # Staff-specific fields
     staff_role = models.CharField(max_length=120, blank=True)
     staff_department = models.CharField(max_length=120, blank=True)
+    is_school_admin = models.BooleanField(
+        default=False,
+        help_text="Staff member who can manage accounts and resources for their school.",
+    )
 
     # Parent-specific relation
     managed_students = models.ManyToManyField(

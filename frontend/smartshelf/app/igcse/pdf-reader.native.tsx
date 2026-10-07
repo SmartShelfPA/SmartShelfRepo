@@ -7,11 +7,14 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import Pdf from 'react-native-pdf';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useBookLastPage } from '@/src/hooks/useBookLastPage';
+import { useAuthStore } from '@/src/store/auth';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function IgcsePdfReaderScreen() {
   const router = useRouter();
@@ -52,6 +55,9 @@ export default function IgcsePdfReaderScreen() {
   );
 
   const sourceUri = (localUri as string) || (url as string) || '';
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const canAnnotate =
+    isAuthenticated && !!localUri && !!bookId && UUID_RE.test(String(bookId));
 
   if (!sourceUri) {
     return (
@@ -85,6 +91,19 @@ export default function IgcsePdfReaderScreen() {
         ) : (
           <View style={styles.pageLabel} />
         )}
+        {canAnnotate ? (
+          <TouchableOpacity
+            onPress={() =>
+              router.push({
+                pathname: '/igcse/annotate',
+                params: { localUri: sourceUri, bookId, title: title ?? '', page: String(currentPage) },
+              } as unknown as Href)
+            }
+            style={styles.iconBtn}
+            accessibilityLabel="Draw, highlight and add notes on this page">
+            <MaterialIcons name="draw" size={22} color={iconColor} />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {initialPage !== null && !error && (

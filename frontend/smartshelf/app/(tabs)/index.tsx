@@ -18,6 +18,7 @@ import { ContinueReadingSection } from '@/src/components/desktop/ContinueReading
 import { useDashboardData } from '@/src/hooks/useDashboardData';
 import { useIsDesktopLayout } from '@/src/lib/desktop';
 import { useStreak } from '@/src/hooks/useStreak';
+import { SchoolWorkSection } from '@/src/components/student/SchoolWorkSection';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -124,6 +125,10 @@ export default function HomeScreen() {
           />
 
           {desktop ? <ContinueReadingSection dashboard={dashboard} /> : null}
+
+          {user?.role === 'student' && user.organization ? (
+            <SchoolWorkSection schoolName={user.organization.name} />
+          ) : null}
 
           <ThemedView style={styles.section}>
             <ThemedText style={styles.sectionTitle} type="defaultSemiBold">

@@ -12,17 +12,18 @@
       top: 0;
       left: 0;
       right: 0;
-      z-index: 2;
+      z-index: 3;
       display: none;
+      flex-direction: column;
       align-items: center;
-      justify-content: center;
-      gap: 12px;
+      gap: 6px;
       padding: 8px 12px;
       background: #111;
       color: #eee;
       font: 14px system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       border-bottom: 1px solid #333;
     }
+    .row { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
     #toolbar button {
       background: #222;
       color: #eee;
@@ -30,21 +31,36 @@
       border-radius: 6px;
       padding: 6px 12px;
       cursor: pointer;
+      font: inherit;
     }
     #toolbar button:disabled { opacity: 0.4; cursor: default; }
+    #toolbar button.active { background: #00c832; border-color: #00c832; color: #000; font-weight: 700; }
+    #annotTools { display: none; }
+    .swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #444; cursor: pointer; padding: 0 !important; }
+    .swatch.active { border-color: #fff; box-shadow: 0 0 0 2px #00c832; }
+    #saveState { font-size: 12px; color: #9ba1a6; min-width: 60px; }
     #pages {
-      padding: 56px 12px 24px;
+      padding: 64px 12px 24px;
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 16px;
       min-height: 100%;
     }
+    body.annot #pages { padding-top: 104px; }
+    .pagewrap { position: relative; max-width: 100%; }
     canvas {
-      max-width: 100%;
+      display: block;
+      width: 100%;
+      height: auto;
       background: #fff;
       box-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
     }
+    svg.ink { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    svg.ink.drawing { pointer-events: auto; touch-action: none; cursor: crosshair; }
+    svg.ink.erasing { pointer-events: auto; touch-action: none; cursor: cell; }
+    svg.ink.noting { pointer-events: auto; cursor: copy; }
+    svg.ink .note { pointer-events: auto; cursor: pointer; }
     #status, #error {
       color: #ccc;
       padding: 48px 16px;
@@ -52,16 +68,54 @@
       font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     }
     #error { color: #ff6b6b; display: none; }
+    #noteEditor {
+      position: fixed;
+      inset: 0;
+      z-index: 5;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.55);
+      font: 14px system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    #noteEditor .card { background: #1f1f1f; color: #eee; border-radius: 12px; padding: 16px; width: min(420px, 92vw); display: flex; flex-direction: column; gap: 10px; }
+    #noteEditor textarea { width: 100%; min-height: 120px; background: #111; color: #eee; border: 1px solid #444; border-radius: 8px; padding: 8px; font: inherit; resize: vertical; }
+    #noteEditor .actions { display: flex; gap: 8px; justify-content: flex-end; }
+    #noteEditor button { background: #222; color: #eee; border: 1px solid #444; border-radius: 6px; padding: 6px 12px; cursor: pointer; font: inherit; }
+    #noteEditor button.primary { background: #00c832; border-color: #00c832; color: #000; font-weight: 700; }
+    #noteEditor button.danger { color: #ff6b6b; border-color: #ff6b6b; margin-right: auto; }
   </style>
 </head>
 <body>
   <div id="toolbar">
-    <button id="prev" type="button">Previous</button>
-    <span id="pageInfo">1 / 1</span>
-    <button id="next" type="button">Next</button>
+    <div class="row">
+      <button id="prev" type="button">Previous</button>
+      <span id="pageInfo">1 / 1</span>
+      <button id="next" type="button">Next</button>
+    </div>
+    <div class="row" id="annotTools">
+      <button type="button" data-tool="read" class="active">Read</button>
+      <button type="button" data-tool="pen">Pen</button>
+      <button type="button" data-tool="highlight">Highlight</button>
+      <button type="button" data-tool="note">Note</button>
+      <button type="button" data-tool="erase">Eraser</button>
+      <span id="swatches" class="row"></span>
+      <span id="saveState"></span>
+    </div>
   </div>
   <div id="pages"><div id="status">Loading PDF…</div></div>
   <div id="error"></div>
+  <div id="noteEditor">
+    <div class="card">
+      <strong id="noteTitle">Note</strong>
+      <textarea id="noteText" placeholder="Write your note"></textarea>
+      <div class="actions">
+        <button type="button" id="noteDelete" class="danger">Delete</button>
+        <button type="button" id="noteCancel">Cancel</button>
+        <button type="button" id="noteSave" class="primary">Save</button>
+      </div>
+    </div>
+  </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
@@ -70,6 +124,7 @@
 
     const params = new URLSearchParams(location.search);
     const file = params.get('file');
+    const annotEnabled = params.get('annot') === '1' && window.parent !== window;
     const pageFromQuery = parseInt(params.get('page') || '1', 10);
     const pageFromHash = (() => {
       const match = location.hash.match(/page=(\d+)/i);
@@ -79,9 +134,333 @@
       ? pageFromQuery
       : (Number.isFinite(pageFromHash) && pageFromHash > 0 ? pageFromHash : 1);
 
+    // --- Host bridge: the app makes the authenticated API calls -------------
+    let reqSeq = 0;
+    const pending = new Map();
+    function host(type, payload) {
+      return new Promise((resolve, reject) => {
+        const reqId = ++reqSeq;
+        pending.set(reqId, { resolve, reject });
+        window.parent.postMessage(Object.assign({ source: 'ss-pdf', type, reqId }, payload), location.origin);
+        setTimeout(() => {
+          if (pending.has(reqId)) {
+            pending.delete(reqId);
+            reject(new Error('No response from the app.'));
+          }
+        }, 20000);
+      });
+    }
+    window.addEventListener('message', (event) => {
+      if (event.origin !== location.origin || event.source !== window.parent) return;
+      const msg = event.data || {};
+      if (msg.source !== 'ss-host' || !pending.has(msg.reqId)) return;
+      const p = pending.get(msg.reqId);
+      pending.delete(msg.reqId);
+      if (msg.ok) p.resolve(msg.data); else p.reject(new Error(msg.error || 'Failed'));
+    });
+    function notifyPage(num) {
+      if (window.parent !== window) {
+        window.parent.postMessage({ source: 'ss-pdf', type: 'page', page: num }, location.origin);
+      }
+    }
+
+    // --- Annotation state ---------------------------------------------------
+    const COLORS = ['#E53935', '#1E88E5', '#43A047', '#212121', '#FFEB3B'];
+    const PEN_WIDTH = 0.004;
+    const HIGHLIGHT_WIDTH = 0.022;
+    const NOTE_COLOR = '#FFC107';
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    let tool = 'read';
+    let color = COLORS[0];
+    let annotations = [];
+    let svg = null;
+    let ratio = 1;
+    let currentPage = 1;
+    let pageToken = 0;
+
+    function setSaveState(text) {
+      document.getElementById('saveState').textContent = text || '';
+    }
+
+    function applyToolClass() {
+      if (!svg) return;
+      svg.classList.toggle('drawing', tool === 'pen' || tool === 'highlight');
+      svg.classList.toggle('erasing', tool === 'erase');
+      svg.classList.toggle('noting', tool === 'note');
+    }
+
+    function setupTools() {
+      document.body.classList.add('annot');
+      document.getElementById('annotTools').style.display = 'flex';
+      document.querySelectorAll('[data-tool]').forEach((btn) => {
+        btn.onclick = () => {
+          tool = btn.dataset.tool;
+          document.querySelectorAll('[data-tool]').forEach((b) => b.classList.toggle('active', b === btn));
+          applyToolClass();
+        };
+      });
+      const sw = document.getElementById('swatches');
+      COLORS.forEach((c, i) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'swatch' + (i === 0 ? ' active' : '');
+        b.style.background = c;
+        b.title = 'Colour';
+        b.onclick = () => {
+          color = c;
+          sw.querySelectorAll('.swatch').forEach((x) => x.classList.toggle('active', x === b));
+        };
+        sw.appendChild(b);
+      });
+    }
+
+    function pointsAttr(points) {
+      return points.map((p) => p[0].toFixed(4) + ',' + (p[1] * ratio).toFixed(4)).join(' ');
+    }
+
+    function drawAnnotation(a) {
+      if (a.kind === 'note') {
+        const g = document.createElementNS(SVG_NS, 'g');
+        g.setAttribute('class', 'note');
+        const [x, y] = a.points[0];
+        const r = 0.014;
+        const circle = document.createElementNS(SVG_NS, 'circle');
+        circle.setAttribute('cx', x);
+        circle.setAttribute('cy', y * ratio);
+        circle.setAttribute('r', r);
+        circle.setAttribute('fill', NOTE_COLOR);
+        circle.setAttribute('stroke', '#5d4300');
+        circle.setAttribute('stroke-width', 0.002);
+        const title = document.createElementNS(SVG_NS, 'title');
+        title.textContent = a.text;
+        g.appendChild(title);
+        g.appendChild(circle);
+        g.addEventListener('click', (e) => {
+          if (tool === 'erase') return;
+          e.stopPropagation();
+          openNoteEditor({ annotation: a });
+        });
+        g.dataset.id = a.id;
+        svg.appendChild(g);
+        return;
+      }
+      const line = document.createElementNS(SVG_NS, 'polyline');
+      line.setAttribute('points', pointsAttr(a.points));
+      line.setAttribute('fill', 'none');
+      line.setAttribute('stroke', a.color);
+      line.setAttribute('stroke-width', a.width);
+      line.setAttribute('stroke-linecap', a.kind === 'highlight' ? 'butt' : 'round');
+      line.setAttribute('stroke-linejoin', 'round');
+      if (a.kind === 'highlight') line.setAttribute('stroke-opacity', '0.35');
+      line.dataset.id = a.id;
+      svg.appendChild(line);
+    }
+
+    function redraw() {
+      if (!svg) return;
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      annotations.forEach(drawAnnotation);
+    }
+
+    function toPoint(evt) {
+      const rect = svg.getBoundingClientRect();
+      const x = (evt.clientX - rect.left) / rect.width;
+      const y = (evt.clientY - rect.top) / rect.height;
+      return [Math.min(1, Math.max(0, x)), Math.min(1, Math.max(0, y))];
+    }
+
+    function simplify(points) {
+      if (points.length <= 2) return points;
+      const out = [points[0]];
+      for (let i = 1; i < points.length - 1; i++) {
+        const last = out[out.length - 1];
+        if (Math.hypot(points[i][0] - last[0], points[i][1] - last[1]) >= 0.002) out.push(points[i]);
+      }
+      out.push(points[points.length - 1]);
+      return out.slice(0, 4000);
+    }
+
+    function distToSegment(p, a, b) {
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const len2 = dx * dx + dy * dy;
+      const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2));
+      return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+    }
+
+    function hit(a, p) {
+      if (a.kind === 'note') return Math.hypot(a.points[0][0] - p[0], a.points[0][1] - p[1]) <= 0.03;
+      const tol = 0.015 + a.width / 2;
+      for (let i = 1; i < a.points.length; i++) {
+        if (distToSegment(p, a.points[i - 1], a.points[i]) <= tol) return true;
+      }
+      return false;
+    }
+
+    async function saveNew(a) {
+      const tempId = a.id;
+      setSaveState('Saving…');
+      try {
+        const saved = await host('create', { annotation: {
+          page: a.page, kind: a.kind, color: a.color, width: a.width, points: a.points, text: a.text || '',
+        } });
+        const idx = annotations.findIndex((x) => x.id === tempId);
+        if (idx >= 0) annotations[idx] = saved;
+        setSaveState('Saved');
+      } catch (err) {
+        annotations = annotations.filter((x) => x.id !== tempId);
+        setSaveState('Not saved: ' + err.message);
+      }
+      redraw();
+    }
+
+    async function removeAnnotation(a) {
+      annotations = annotations.filter((x) => x.id !== a.id);
+      redraw();
+      if (String(a.id).startsWith('tmp-')) return;
+      setSaveState('Saving…');
+      try {
+        await host('delete', { id: a.id });
+        setSaveState('Saved');
+      } catch (err) {
+        annotations.push(a);
+        redraw();
+        setSaveState('Not deleted: ' + err.message);
+      }
+    }
+
+    // --- Note editor ----------------------------------------------------------
+    let noteContext = null;
+    function openNoteEditor(ctx) {
+      noteContext = ctx;
+      const editor = document.getElementById('noteEditor');
+      document.getElementById('noteTitle').textContent = ctx.annotation ? 'Your note' : 'New note';
+      document.getElementById('noteText').value = ctx.annotation ? ctx.annotation.text : '';
+      document.getElementById('noteDelete').style.display = ctx.annotation ? 'inline-block' : 'none';
+      editor.style.display = 'flex';
+      setTimeout(() => document.getElementById('noteText').focus(), 0);
+    }
+    function closeNoteEditor() {
+      noteContext = null;
+      document.getElementById('noteEditor').style.display = 'none';
+    }
+    document.getElementById('noteCancel').onclick = closeNoteEditor;
+    document.getElementById('noteDelete').onclick = () => {
+      const a = noteContext && noteContext.annotation;
+      closeNoteEditor();
+      if (a) removeAnnotation(a);
+    };
+    document.getElementById('noteSave').onclick = async () => {
+      const text = document.getElementById('noteText').value.trim();
+      const ctx = noteContext;
+      closeNoteEditor();
+      if (!ctx) return;
+      if (ctx.annotation) {
+        if (!text) return removeAnnotation(ctx.annotation);
+        if (text === ctx.annotation.text) return;
+        setSaveState('Saving…');
+        try {
+          const saved = await host('update', { id: ctx.annotation.id, text });
+          annotations = annotations.map((x) => (x.id === saved.id ? saved : x));
+          redraw();
+          setSaveState('Saved');
+        } catch (err) {
+          setSaveState('Not saved: ' + err.message);
+        }
+        return;
+      }
+      if (!text) return;
+      const a = { id: 'tmp-' + Date.now(), page: currentPage, kind: 'note', color: NOTE_COLOR, width: 0.01, points: [ctx.point], text };
+      annotations.push(a);
+      redraw();
+      saveNew(a);
+    };
+
+    function attachDrawing() {
+      let stroke = null;
+      let live = null;
+      let erasing = false;
+
+      svg.addEventListener('pointerdown', (evt) => {
+        if (tool === 'read') return;
+        const p = toPoint(evt);
+        if (tool === 'note') {
+          openNoteEditor({ point: p });
+          return;
+        }
+        evt.preventDefault();
+        svg.setPointerCapture(evt.pointerId);
+        if (tool === 'erase') {
+          erasing = true;
+          annotations.filter((a) => hit(a, p)).forEach(removeAnnotation);
+          return;
+        }
+        const isHighlight = tool === 'highlight';
+        stroke = {
+          id: 'tmp-' + Date.now(),
+          page: currentPage,
+          kind: isHighlight ? 'highlight' : 'pen',
+          color: isHighlight && color === COLORS[0] ? '#FFEB3B' : color,
+          width: isHighlight ? HIGHLIGHT_WIDTH : PEN_WIDTH,
+          points: [p],
+          text: '',
+        };
+        live = document.createElementNS(SVG_NS, 'polyline');
+        live.setAttribute('fill', 'none');
+        live.setAttribute('stroke', stroke.color);
+        live.setAttribute('stroke-width', stroke.width);
+        live.setAttribute('stroke-linecap', isHighlight ? 'butt' : 'round');
+        live.setAttribute('stroke-linejoin', 'round');
+        if (isHighlight) live.setAttribute('stroke-opacity', '0.35');
+        svg.appendChild(live);
+      });
+
+      svg.addEventListener('pointermove', (evt) => {
+        const p = toPoint(evt);
+        if (erasing) {
+          annotations.filter((a) => hit(a, p)).forEach(removeAnnotation);
+          return;
+        }
+        if (!stroke) return;
+        stroke.points.push(p);
+        live.setAttribute('points', pointsAttr(stroke.points));
+      });
+
+      const finish = () => {
+        erasing = false;
+        if (!stroke) return;
+        const done = stroke;
+        stroke = null;
+        live = null;
+        done.points = simplify(done.points);
+        if (done.points.length < 2) {
+          redraw();
+          return;
+        }
+        annotations.push(done);
+        redraw();
+        saveNew(done);
+      };
+      svg.addEventListener('pointerup', finish);
+      svg.addEventListener('pointercancel', finish);
+    }
+
+    async function loadAnnotations(num, token) {
+      try {
+        const list = await host('list', { page: num });
+        if (token !== pageToken) return;
+        annotations = Array.isArray(list) ? list : [];
+        redraw();
+        setSaveState('');
+      } catch (err) {
+        if (token === pageToken) setSaveState('Notes unavailable');
+      }
+    }
+
+    // --- PDF rendering --------------------------------------------------------
     if (!file) {
       showError('No PDF file specified.');
     } else {
+      if (annotEnabled) setupTools();
       loadPdf(file, startPage);
     }
 
@@ -104,16 +483,36 @@
           container.innerHTML = '';
           const page = await pdf.getPage(num);
           const viewport = page.getViewport({ scale: window.innerWidth < 900 ? 1 : 1.35 });
+          const wrap = document.createElement('div');
+          wrap.className = 'pagewrap';
+          wrap.style.width = viewport.width + 'px';
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
           canvas.width = viewport.width;
           canvas.height = viewport.height;
-          container.appendChild(canvas);
+          wrap.appendChild(canvas);
+          container.appendChild(wrap);
           await page.render({ canvasContext: ctx, viewport }).promise;
           document.getElementById('pageInfo').textContent = num + ' / ' + pdf.numPages;
           document.getElementById('prev').disabled = num <= 1;
           document.getElementById('next').disabled = num >= pdf.numPages;
           current = num;
+          currentPage = num;
+          notifyPage(num);
+
+          if (annotEnabled) {
+            ratio = viewport.height / viewport.width;
+            svg = document.createElementNS(SVG_NS, 'svg');
+            svg.setAttribute('class', 'ink');
+            svg.setAttribute('viewBox', '0 0 1 ' + ratio);
+            svg.setAttribute('preserveAspectRatio', 'none');
+            wrap.appendChild(svg);
+            annotations = [];
+            applyToolClass();
+            attachDrawing();
+            pageToken += 1;
+            loadAnnotations(num, pageToken);
+          }
         }
 
         document.getElementById('prev').onclick = function () {

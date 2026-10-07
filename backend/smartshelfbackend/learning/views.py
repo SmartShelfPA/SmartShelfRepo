@@ -5,7 +5,7 @@ import logging
 
 import requests
 from django.conf import settings
-from django.db.models import Avg, Count
+from django.db.models import Avg, Count, Q
 from django.http import FileResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -73,7 +73,12 @@ class IgcsBookListView(generics.ListAPIView):
     serializer_class = IgcsEpubBookSerializer
 
     def get_queryset(self):
-        return IgcsEpubBook.objects.filter(is_active=True).order_by("title")
+        user = self.request.user
+        return (
+            IgcsEpubBook.objects.filter(is_active=True)
+            .filter(Q(organization__isnull=True) | Q(organization_id=user.organization_id))
+            .order_by("title")
+        )
 
     def list(self, request, *args, **kwargs):
         books = list(self.get_queryset())
@@ -95,7 +100,10 @@ class IgcsBookDetailView(generics.RetrieveAPIView):
     lookup_field = "pk"
 
     def get_queryset(self):
-        return IgcsEpubBook.objects.filter(is_active=True)
+        user = self.request.user
+        return IgcsEpubBook.objects.filter(is_active=True).filter(
+            Q(organization__isnull=True) | Q(organization_id=user.organization_id)
+        )
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -494,7 +502,12 @@ class PracticeSessionDetailView(APIView):
             user=request.user,
         )
         status_val = request.data.get("status")
-        score = float(request.data.get("score_percent") or 0)
+        if status_val and status_val not in PracticeSession.Status.values:
+            return Response({"error": "Invalid status."}, status=400)
+        try:
+            score = min(100.0, max(0.0, float(request.data.get("score_percent") or 0)))
+        except (TypeError, ValueError):
+            return Response({"error": "score_percent must be a number."}, status=400)
         duration = request.data.get("duration_seconds")
         responses = request.data.get("responses") or []
 
@@ -624,7 +637,7 @@ def _accessible_protected_pdfs(user):
     qs = ProtectedPdfAsset.objects.filter(
         published=True,
         rights_status=ProtectedPdfAsset.RightsStatus.APPROVED,
-    )
+    ).filter(Q(organization__isnull=True) | Q(organization_id=user.organization_id))
     # Hide staff-only assets from non-staff users.
     is_staff = bool(
         getattr(user, "is_staff", False)
@@ -632,6 +645,9 @@ def _accessible_protected_pdfs(user):
     )
     if not is_staff:
         qs = qs.exclude(access_level=ProtectedPdfAsset.AccessLevel.STAFF)
+    if getattr(user, "role", "") == "student":
+        allowed = [a.pk for a in qs if a.audience_allows(user)]
+        qs = qs.filter(pk__in=allowed)
     return qs
 
 

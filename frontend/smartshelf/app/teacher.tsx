@@ -26,15 +26,16 @@ import {
   type TeacherStudent,
 } from '@/src/api/teacher';
 import { createParentInvite } from '@/src/api/parentInvite';
-import { useRequireAuth } from '@/src/hooks/useRequireAuth';
+import { AccountMenu } from '@/src/components/AccountMenu';
+import { useRequireRole } from '@/src/hooks/useRequireRole';
 import { useAuthStore } from '@/src/store/auth';
 
 export default function TeacherView() {
-  useRequireAuth();
+  const allowed = useRequireRole(['staff']);
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const signOut = useAuthStore((s) => s.signOut);
   const user = useAuthStore((s) => s.user);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const colorScheme = useColorScheme();
   const backgroundColor = useThemeColor({}, 'background');
@@ -69,12 +70,8 @@ export default function TeacherView() {
   }, []);
 
   useEffect(() => {
-    if (user && user.role !== 'staff') {
-      router.replace('/(tabs)');
-      return;
-    }
-    load();
-  }, [user, router, load]);
+    if (allowed) load();
+  }, [allowed, load]);
 
   const filteredStudents = useMemo(() => {
     if (!dashboard) return [];
@@ -132,7 +129,7 @@ export default function TeacherView() {
     }
   };
 
-  if (loading) {
+  if (!allowed || loading) {
     return (
       <ThemedView style={[styles.centered, { backgroundColor }]}>
         <ActivityIndicator size="large" color={tintColor} />
@@ -155,15 +152,33 @@ export default function TeacherView() {
     <ThemedView style={[styles.container, { backgroundColor }]}>
       <ParentHeader
         parentName={`${dashboard.staffRole}: ${dashboard.teacherName}`}
-        onProfilePress={async () => {
-          await signOut();
-          router.replace('/register');
-        }}
+        onProfilePress={() => setMenuOpen(true)}
       />
 
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}>
+        <View style={styles.actionGrid}>
+          {[
+            { label: 'New assignment', icon: 'add-task' as const, href: '/staff/assignments/new' as const },
+            { label: 'Assignments', icon: 'assignment' as const, href: '/staff/assignments' as const },
+            { label: 'School resources', icon: 'folder-shared' as const, href: '/school/resources' as const },
+            ...(user?.is_school_admin
+              ? [{ label: 'School admin', icon: 'admin-panel-settings' as const, href: '/school/admin' as const }]
+              : []),
+            { label: 'Help & feedback', icon: 'support-agent' as const, href: '/feedback' as const },
+          ].map((action) => (
+            <TouchableOpacity
+              key={action.label}
+              style={[styles.actionTile, { borderColor: tintColor, backgroundColor: cardBgColor }]}
+              onPress={() => router.push(action.href)}
+              activeOpacity={0.8}>
+              <MaterialIcons name={action.icon} size={22} color={tintColor} />
+              <ThemedText style={styles.actionLabel}>{action.label}</ThemedText>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         <SectionTitle color={mutedTextColor}>CLASS OVERVIEW</SectionTitle>
         {dashboard.classes.map((cls) => (
           <TeacherClassOverviewCard key={cls.id} cls={cls} />
@@ -215,12 +230,22 @@ export default function TeacherView() {
           ))
         )}
 
-        <SectionTitle color={mutedTextColor}>ASSIGNMENTS & READING</SectionTitle>
+        <SectionTitle color={mutedTextColor}>ASSIGNMENTS</SectionTitle>
         {dashboard.assignments.length === 0 ? (
-          <ThemedText style={{ color: mutedTextColor }}>No active assignments tracked yet.</ThemedText>
+          <TouchableOpacity
+            style={[styles.rowCard, { backgroundColor: cardBgColor, borderColor }]}
+            onPress={() => router.push('/staff/assignments/new')}>
+            <ThemedText style={styles.cardTitle}>No assignments yet</ThemedText>
+            <ThemedText style={[styles.cardMeta, { color: mutedTextColor }]}>
+              Set past-question practice, reading, or your own questions (multiple choice or written).
+            </ThemedText>
+          </TouchableOpacity>
         ) : (
           dashboard.assignments.map((a) => (
-            <View key={a.id} style={[styles.rowCard, { backgroundColor: cardBgColor, borderColor }]}>
+            <TouchableOpacity
+              key={a.id}
+              onPress={() => router.push({ pathname: '/staff/assignments/[id]', params: { id: a.id } })}
+              style={[styles.rowCard, { backgroundColor: cardBgColor, borderColor }]}>
               <ThemedText style={styles.cardTitle}>{a.title}</ThemedText>
               <ThemedText style={[styles.cardMeta, { color: mutedTextColor }]}>
                 {a.className} · {a.textbook}
@@ -233,7 +258,7 @@ export default function TeacherView() {
                   Completed {a.completedCount}/{a.totalStudents}
                 </ThemedText>
               </View>
-            </View>
+            </TouchableOpacity>
           ))
         )}
 
@@ -378,6 +403,13 @@ export default function TeacherView() {
           </View>
         </View>
       </Modal>
+
+      <AccountMenu
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        title={dashboard.teacherName}
+        subtitle={user?.is_school_admin ? 'School admin' : 'Teacher account'}
+      />
     </ThemedView>
   );
 }
@@ -437,6 +469,18 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   scroll: { paddingHorizontal: 16, maxWidth: 640, alignSelf: 'center', width: '100%' },
   sectionTitle: { fontSize: 12, fontWeight: '600', letterSpacing: 1 },
+  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 },
+  actionTile: {
+    flexGrow: 1,
+    flexBasis: '45%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  actionLabel: { fontSize: 14, fontWeight: '600', flexShrink: 1 },
   chipScroll: { marginBottom: 12 },
   chip: {
     paddingHorizontal: 14,

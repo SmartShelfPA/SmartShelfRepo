@@ -26,6 +26,9 @@ import { HtmlContent } from '@/src/components/practice/HtmlContent';
 import { PracticeTimer } from '@/src/components/practice/PracticeTimer';
 import { QuestionPalette } from '@/src/components/practice/QuestionPalette';
 import { ScoreSummaryCard } from '@/src/components/practice/ScoreSummaryCard';
+import { submitStudentAssignment } from '@/src/api/assignments';
+import { recordCompletedPracticeSession } from '@/src/api/practiceSessions';
+import { useAuthStore } from '@/src/store/auth';
 import { usePracticeHistoryStore } from '@/src/store/practiceHistoryStore';
 import { parsePracticeExamType } from '@/src/types/exam';
 import type { NormalizedQuestion } from '@/src/types/practice';
@@ -38,8 +41,11 @@ export default function PracticeSessionScreen() {
     subject?: string | string[];
     subjectLabel?: string | string[];
     year?: string | string[];
+    assignmentId?: string | string[];
   }>();
 
+  const assignmentId = Array.isArray(params.assignmentId) ? params.assignmentId[0] : params.assignmentId;
+  const userRole = useAuthStore((s) => s.user?.role);
   const rawExam = Array.isArray(params.examType) ? params.examType[0] : params.examType;
   const examType = parsePracticeExamType(rawExam);
   /** ALOC `subject` slug (lower-cased when requesting questions). */
@@ -73,6 +79,9 @@ export default function PracticeSessionScreen() {
   const [aiExplainById, setAiExplainById] = useState<Record<string, string>>({});
   const [aiExplainLoading, setAiExplainLoading] = useState(false);
   const [aiExplainError, setAiExplainError] = useState<string | null>(null);
+  const [assignmentState, setAssignmentState] = useState<
+    { status: 'idle' | 'saving' | 'done' } | { status: 'error'; message: string }
+  >({ status: 'idle' });
 
   const addSession = usePracticeHistoryStore((s) => s.addSession);
   const sessionStartedAtRef = useRef<string>(new Date().toISOString());
@@ -201,6 +210,44 @@ export default function PracticeSessionScreen() {
       answeredCount: questions.length,
       correctCount: score.correct,
     });
+    if (userRole === 'student' && (examType === 'WAEC' || examType === 'JAMB')) {
+      void saveToServer(examType);
+    }
+  };
+
+  const saveToServer = async (exam: 'WAEC' | 'JAMB') => {
+    if (assignmentId) setAssignmentState({ status: 'saving' });
+    try {
+      const session = await recordCompletedPracticeSession({
+        examType: exam,
+        subject,
+        year: Number.isFinite(yearNum) ? yearNum : undefined,
+        scorePercent: score.percent,
+        correctCount: score.correct,
+        answeredCount: Object.keys(answers).length,
+        durationSeconds: Math.round(
+          (Date.now() - new Date(sessionStartedAtRef.current).getTime()) / 1000
+        ),
+        responses: questions.map((qq, i) => ({
+          question_id: qq.id,
+          selected_option_id: answers[qq.id] ?? '',
+          correct_option_id: qq.correctOptionId ?? '',
+          is_correct: !!answers[qq.id] && answers[qq.id] === qq.correctOptionId,
+          order_index: i,
+        })),
+      });
+      if (assignmentId) {
+        await submitStudentAssignment(assignmentId, { practice_session_id: session.id });
+        setAssignmentState({ status: 'done' });
+      }
+    } catch (e) {
+      if (assignmentId) {
+        setAssignmentState({
+          status: 'error',
+          message: e instanceof Error ? e.message : 'Could not submit to your teacher.',
+        });
+      }
+    }
   };
 
   const retry = () => {
@@ -216,6 +263,7 @@ export default function PracticeSessionScreen() {
     setFinished(false);
     setShowExplain(false);
     setSummaryOpen(false);
+    setAssignmentState({ status: 'idle' });
     scoreReportedRef.current = false;
     sessionStartedAtRef.current = new Date().toISOString();
     setRetryToken((t) => t + 1);
@@ -455,6 +503,26 @@ export default function PracticeSessionScreen() {
               cardBg={cardBgColor}
               borderColor={borderColor}
             />
+            {assignmentId && assignmentState.status !== 'idle' ? (
+              <View style={styles.assignmentStatus}>
+                {assignmentState.status === 'saving' ? (
+                  <ActivityIndicator size="small" color={tintColor} />
+                ) : (
+                  <MaterialIcons
+                    name={assignmentState.status === 'done' ? 'check-circle' : 'error-outline'}
+                    size={18}
+                    color={assignmentState.status === 'done' ? '#00C832' : '#e53935'}
+                  />
+                )}
+                <ThemedText style={{ color: textColor, flex: 1 }}>
+                  {assignmentState.status === 'error'
+                    ? assignmentState.message
+                    : assignmentState.status === 'saving'
+                      ? 'Sending your score to your teacher…'
+                      : 'Submitted to your teacher.'}
+                </ThemedText>
+              </View>
+            ) : null}
             <TouchableOpacity
               style={[styles.modalBtn, { backgroundColor: tintColor }]}
               onPress={() => setSummaryOpen(false)}
@@ -473,6 +541,7 @@ export default function PracticeSessionScreen() {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1 },
+  assignmentStatus: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

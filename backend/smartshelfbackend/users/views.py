@@ -43,7 +43,13 @@ class BookListView(generics.ListAPIView):
     serializer_class = BookSerializer
 
     def get_queryset(self):
-        queryset = Book.objects.prefetch_related("category").order_by("title")
+        user = self.request.user
+        queryset = (
+            Book.objects.filter(rights_status=Book.RightsStatus.APPROVED)
+            .filter(Q(organization__isnull=True) | Q(organization_id=user.organization_id))
+            .prefetch_related("category")
+            .order_by("title")
+        )
         search = self.request.query_params.get("search")
         category = self.request.query_params.get("category")
 
@@ -75,7 +81,12 @@ class BookshelfView(APIView):
             return queryset.filter(user=user)
         if user.role == UserProfile.Role.PARENT:
             return queryset.filter(user__in=user.managed_students.all())
-        return queryset
+        if user.role == UserProfile.Role.STAFF and user.organization_id:
+            return queryset.filter(
+                user__organization_id=user.organization_id,
+                user__role=UserProfile.Role.STUDENT,
+            )
+        return queryset.none()
 
     def get(self, request):
         progress_qs = self.get_progress_queryset(request.user)

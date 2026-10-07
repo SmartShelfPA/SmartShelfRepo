@@ -12,10 +12,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from learning.models import PracticeSession
+from classroom.models import Assignment, AssignmentSubmission
+from learning.models import IgcsUserReading, PracticeSession
 
 from .models import ReadingProgress, TeacherNote, UserProfile
-from .permissions import IsStaffRole
+from .permissions import IsParentRole, IsStaffRole
 
 
 def _student_status(student, reading_qs, practice_qs, now) -> str:
@@ -42,58 +43,130 @@ def _student_status(student, reading_qs, practice_qs, now) -> str:
     return "on_track"
 
 
+def _parent_child_summary(child, now) -> dict:
+    week_ago = now - timedelta(days=7)
+
+    readings = list(
+        IgcsUserReading.objects.filter(user=child).select_related("book").order_by("-last_read_at")[:8]
+    )
+    sessions = PracticeSession.objects.filter(user=child).order_by("-started_at")
+    completed_sessions = sessions.filter(status=PracticeSession.Status.COMPLETED)
+    avg_score = completed_sessions.aggregate(avg=Avg("score_percent"))["avg"]
+
+    submissions = list(
+        AssignmentSubmission.objects.filter(student=child)
+        .select_related("assignment", "assignment__created_by")
+        .order_by("-assignment__created_at")[:15]
+    )
+    pending = [s for s in submissions if s.status == AssignmentSubmission.Status.ASSIGNED]
+    done = [s for s in submissions if s.status != AssignmentSubmission.Status.ASSIGNED]
+
+    notes = TeacherNote.objects.filter(student=child, shared_with_parent=True).select_related(
+        "teacher"
+    )[:10]
+
+    candidates = [r.last_read_at for r in readings if r.last_read_at]
+    first_session = sessions.first()
+    if first_session:
+        candidates.append(first_session.started_at)
+    candidates += [s.submitted_at for s in done if s.submitted_at]
+    last_active = max(candidates) if candidates else None
+
+    overdue = [s for s in pending if s.assignment.due_at and s.assignment.due_at < now]
+    if overdue:
+        status_label = "needs_attention"
+    elif last_active is None or last_active < week_ago:
+        status_label = "inactive"
+    elif avg_score is not None and avg_score < 50:
+        status_label = "needs_review"
+    else:
+        status_label = "on_track"
+
+    return {
+        "id": str(child.id),
+        "name": child.full_name or child.username,
+        "className": child.student_class,
+        "schoolName": child.organization.name if child.organization else "",
+        "status": status_label,
+        "lastActiveAt": last_active.isoformat() if last_active else None,
+        "currentTasks": len(pending),
+        "completedTasks": len(done),
+        "shelfId": str(child.id),
+        "reading": [
+            {
+                "id": str(r.id),
+                "title": r.book.title,
+                "progressPercent": r.progress_percent,
+                "lastReadAt": r.last_read_at.isoformat() if r.last_read_at else None,
+            }
+            for r in readings
+        ],
+        "practice": {
+            "sessionsThisWeek": sessions.filter(started_at__gte=week_ago).count(),
+            "completedSessions": completed_sessions.count(),
+            "avgScorePercent": round(avg_score, 1) if avg_score is not None else None,
+            "recent": [
+                {
+                    "id": str(s.id),
+                    "examType": s.exam_type,
+                    "subject": s.subject,
+                    "year": s.year,
+                    "scorePercent": round(s.score_percent, 1),
+                    "startedAt": s.started_at.isoformat(),
+                }
+                for s in completed_sessions[:5]
+            ],
+        },
+        "assignments": [
+            {
+                "id": str(s.assignment_id),
+                "title": s.assignment.title,
+                "kind": s.assignment.kind,
+                "teacherName": (s.assignment.created_by.full_name or s.assignment.created_by.username)
+                if s.assignment.created_by
+                else "",
+                "dueAt": s.assignment.due_at.isoformat() if s.assignment.due_at else None,
+                "status": s.status,
+                "isOverdue": s in overdue,
+                "scorePercent": s.score_percent,
+                "teacherFeedback": s.teacher_feedback,
+                "submittedAt": s.submitted_at.isoformat() if s.submitted_at else None,
+            }
+            for s in submissions
+        ],
+        "teacherNotes": [
+            {
+                "id": str(n.id),
+                "teacherName": n.teacher.full_name or n.teacher.username,
+                "note": n.note,
+                "createdAt": n.created_at.isoformat(),
+            }
+            for n in notes
+        ],
+    }
+
+
 class ParentDashboardView(APIView):
-    permission_classes = [IsAuthenticated]
+    """GET /api/v1/parent/dashboard/ — only children linked to this parent via invite."""
+
+    permission_classes = [IsAuthenticated, IsParentRole]
 
     def get(self, request):
         user = request.user
-        if user.role != UserProfile.Role.PARENT:
-            return Response({"error": "Parent access only."}, status=status.HTTP_403_FORBIDDEN)
-
-        children = list(user.managed_students.all())
-        items_by_child: dict[str, list] = {}
-        child_rows = []
-        total_items = 0
-
-        for child in children:
-            progress = ReadingProgress.objects.filter(user=child).select_related("book")
-            shelf_items = []
-            for p in progress[:20]:
-                qty = 1
-                st = "ok"
-                if p.status == ReadingProgress.Status.TO_READ:
-                    st = "low"
-                elif p.percent_complete >= 100:
-                    st = "ok"
-                shelf_items.append(
-                    {
-                        "id": str(p.id),
-                        "name": p.book.title,
-                        "quantity": qty,
-                        "status": st,
-                    }
-                )
-            items_by_child[str(child.id)] = shelf_items
-            total_items += len(shelf_items)
-            completed = progress.filter(status=ReadingProgress.Status.COMPLETED).count()
-            reading = progress.filter(status=ReadingProgress.Status.READING).count()
-            child_rows.append(
-                {
-                    "id": str(child.id),
-                    "name": child.full_name or child.username,
-                    "currentTasks": reading,
-                    "completedTasks": completed,
-                    "shelfId": str(child.id),
-                }
-            )
-
+        now = timezone.now()
+        children = list(
+            user.managed_students.filter(role=UserProfile.Role.STUDENT).select_related("organization")
+        )
+        child_rows = [_parent_child_summary(child, now) for child in children]
         return Response(
             {
                 "parentName": user.full_name or user.username,
                 "totalChildren": len(children),
-                "totalItemsTracked": total_items,
+                "totalItemsTracked": sum(
+                    len(c["assignments"]) + len(c["reading"]) for c in child_rows
+                ),
                 "children": child_rows,
-                "itemsByChild": items_by_child,
+                "itemsByChild": {},
             }
         )
 
@@ -106,9 +179,15 @@ class StaffDashboardView(APIView):
         now = timezone.now()
         week_ago = now - timedelta(days=7)
 
+        if not teacher.organization_id:
+            return Response(
+                {"error": "Your account is not linked to a school."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         students = UserProfile.objects.filter(
             organization=teacher.organization,
             role=UserProfile.Role.STUDENT,
+            is_active=True,
         ).order_by("full_name", "username")
 
         reading_qs = ReadingProgress.objects.select_related("book")
@@ -197,9 +276,9 @@ class StaffDashboardView(APIView):
                     "chaptersRead": chapters_read,
                     "readingMinutes": read_mins,
                     "avgQuizScore": round(avg_quiz, 1) if avg_quiz is not None else None,
-                    "assignmentsSubmitted": st_practice.filter(
-                        status=PracticeSession.Status.COMPLETED
-                    ).count(),
+                    "assignmentsSubmitted": AssignmentSubmission.objects.filter(student=student)
+                    .exclude(status=AssignmentSubmission.Status.ASSIGNED)
+                    .count(),
                     "strengths": strengths[:3],
                     "weaknesses": weaknesses[:3],
                 }
@@ -257,34 +336,31 @@ class StaffDashboardView(APIView):
                 }
             )
 
+        assignment_qs = Assignment.objects.filter(organization_id=teacher.organization_id)
+        if not teacher.is_school_admin:
+            assignment_qs = assignment_qs.filter(created_by=teacher)
         assignments = []
-        for student in students[:12]:
-            for p in reading_qs.filter(user=student, status=ReadingProgress.Status.READING)[:2]:
-                cls_students = classes_map.get((student.student_class or "Unassigned").strip() or "Unassigned", [])
-                total = len(cls_students) or 1
-                started = reading_qs.filter(
-                    book=p.book,
-                    user__in=cls_students,
-                ).exclude(status=ReadingProgress.Status.TO_READ).count()
-                completed = reading_qs.filter(
-                    book=p.book,
-                    user__in=cls_students,
-                    status=ReadingProgress.Status.COMPLETED,
-                ).count()
-                assignments.append(
-                    {
-                        "id": str(p.id),
-                        "title": f"Read: {p.book.title}",
-                        "textbook": p.book.title,
-                        "chapter": f"Page {p.current_page}",
-                        "assignedAt": p.last_read_at.isoformat() if p.last_read_at else now.isoformat(),
-                        "startedCount": started,
-                        "completedCount": completed,
-                        "totalStudents": total,
-                        "avgScore": None,
-                        "className": (student.student_class or "Unassigned").strip() or "Unassigned",
-                    }
-                )
+        for a in assignment_qs.select_related("resource").prefetch_related("submissions")[:15]:
+            subs = list(a.submissions.all())
+            scores = [s.score_percent for s in subs if s.score_percent is not None]
+            assignments.append(
+                {
+                    "id": str(a.id),
+                    "title": a.title,
+                    "textbook": a.resource.title if a.resource else (a.subject or a.get_kind_display()),
+                    "chapter": a.resource_pages or (f"{a.exam_type} {a.year or ''}".strip() if a.exam_type else ""),
+                    "assignedAt": a.created_at.isoformat(),
+                    "startedCount": sum(
+                        1 for s in subs if s.status != AssignmentSubmission.Status.ASSIGNED
+                    ),
+                    "completedCount": sum(
+                        1 for s in subs if s.status == AssignmentSubmission.Status.GRADED
+                    ),
+                    "totalStudents": len(subs),
+                    "avgScore": round(sum(scores) / len(scores), 1) if scores else None,
+                    "className": a.target_class or "Selected students",
+                }
+            )
 
         notes = [
             {

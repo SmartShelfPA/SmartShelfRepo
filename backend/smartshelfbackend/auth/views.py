@@ -50,6 +50,7 @@ class RegisterSerializer(serializers.Serializer):
     )
     company_name = serializers.CharField(required=False, allow_blank=True, max_length=255)
     contact_email = serializers.EmailField(required=False, allow_blank=True)
+    school_code = serializers.CharField(required=False, allow_blank=True, max_length=32)
 
     # Consent fields — terms_accepted is required for new accounts.
     terms_accepted = serializers.BooleanField(
@@ -68,12 +69,14 @@ class RegisterSerializer(serializers.Serializer):
     def validate(self, attrs):
         role = attrs["role"]
         if role == UserProfile.Role.STAFF:
-            if not attrs.get("staff_role"):
-                raise serializers.ValidationError("staff_role is required for staff users.")
-            if not attrs.get("staff_department"):
-                raise serializers.ValidationError(
-                    "staff_department is required for staff users."
-                )
+            raise serializers.ValidationError(
+                {
+                    "role": (
+                        "Teacher accounts are created by your school administrator. "
+                        "Ask your school to add you, then sign in from Teacher Access."
+                    )
+                }
+            )
         if role == UserProfile.Role.STUDENT and not attrs.get("student_class"):
             raise serializers.ValidationError("student_class is required for students.")
         if role == UserProfile.Role.PARENT:
@@ -124,6 +127,19 @@ class RegisterView(APIView):
             if not organization:
                 return Response(
                     {"error": "Organization not found for organization_slug."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            required_code = (organization.join_code or "").strip().upper()
+            given_code = (data.get("school_code") or "").strip().upper()
+            if required_code and given_code != required_code:
+                return Response(
+                    {
+                        "error": (
+                            f"{organization.name} requires a school code to join. "
+                            "Ask your teacher for the code."
+                        ),
+                        "code": "school_code_required",
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
@@ -191,6 +207,25 @@ class RegisterView(APIView):
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
     password = serializers.CharField()
+    portal = serializers.ChoiceField(
+        choices=["student", "parent", "staff"], required=False, allow_blank=True
+    )
+
+
+# Which account roles may sign in through each portal. Keeps a student from
+# opening the parent monitoring view (and vice versa) with their own login.
+PORTAL_ROLES = {
+    "student": {UserProfile.Role.STUDENT, UserProfile.Role.PUBLISHER},
+    "parent": {UserProfile.Role.PARENT},
+    "staff": {UserProfile.Role.STAFF},
+}
+
+PORTAL_HINTS = {
+    UserProfile.Role.STUDENT: "This is a student account. Sign in from the student login screen.",
+    UserProfile.Role.PARENT: "This is a parent account. Sign in from Parent Access.",
+    UserProfile.Role.STAFF: "This is a teacher account. Sign in from Teacher Access.",
+    UserProfile.Role.PUBLISHER: "This is a publisher account. Sign in from the main login screen.",
+}
 
 
 MAX_FAILED_LOGINS = int(os.environ.get("AUTH_MAX_FAILED_LOGINS", "5"))
@@ -265,6 +300,23 @@ class LoginView(APIView):
 
         # Successful authentication — clear any prior lockout.
         user.clear_failed_logins()
+
+        portal = data.get("portal") or ""
+        if portal and user.role not in PORTAL_ROLES[portal]:
+            AuditLog.log(
+                AuditLog.Action.ADMIN_ACTION,
+                actor=user,
+                target=user,
+                notes=f"Login refused: {user.role} account used on {portal} portal.",
+            )
+            return Response(
+                {
+                    "error": "wrong_portal",
+                    "message": PORTAL_HINTS.get(user.role, "Use the correct sign-in screen."),
+                    "role": user.role,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         token, _ = Token.objects.get_or_create(user=user)
         return Response(

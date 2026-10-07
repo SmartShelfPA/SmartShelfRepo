@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   StyleSheet,
   ScrollView,
   View,
   TouchableOpacity,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -17,10 +17,12 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import type { ParentDashboardData } from '@/src/types/parent';
 import { fetchParentDashboard } from '@/src/api/parent';
 import { ParentHeader, ParentSummaryCards } from '@/src/components/parent';
-import { useRequireAuth } from '@/src/hooks/useRequireAuth';
+import { ChildProgressCard } from '@/src/components/parent/ChildProgressCard';
+import { AccountMenu } from '@/src/components/AccountMenu';
+import { useRequireRole } from '@/src/hooks/useRequireRole';
 
 export default function ParentView() {
-  useRequireAuth();
+  const allowed = useRequireRole(['parent']);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
@@ -33,54 +35,29 @@ export default function ParentView() {
 
   const [dashboard, setDashboard] = useState<ParentDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const mountedRef = useRef(true);
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  useEffect(() => {
-    mountedRef.current = true;
-    let cancelled = false;
-    setLoading(true);
+  const load = useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
+    if (mode === 'refresh') setRefreshing(true);
+    else setLoading(true);
     setError(null);
-    fetchParentDashboard()
-      .then((data) => {
-        if (!cancelled) {
-          setDashboard(data);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load parent dashboard');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-      mountedRef.current = false;
-    };
+    try {
+      setDashboard(await fetchParentDashboard());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load parent dashboard');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
-  const handleRetry = () => {
-    setError(null);
-    setLoading(true);
-    fetchParentDashboard()
-      .then((data) => {
-        if (mountedRef.current) setDashboard(data);
-      })
-      .catch((err) => {
-        if (mountedRef.current) {
-          setError(err instanceof Error ? err.message : 'Failed to load parent dashboard');
-        }
-      })
-      .finally(() => {
-        if (mountedRef.current) setLoading(false);
-      });
-  };
+  useEffect(() => {
+    if (allowed) void load();
+  }, [allowed, load]);
 
-  if (loading) {
+  if (!allowed || loading) {
     return (
       <ThemedView style={[styles.container, styles.centered, { backgroundColor }]}>
         <ActivityIndicator size="large" color={tintColor} />
@@ -91,14 +68,16 @@ export default function ParentView() {
     );
   }
 
-  if (error) {
+  if (error || !dashboard) {
     return (
       <ThemedView style={[styles.container, styles.centered, { backgroundColor }]}>
         <MaterialIcons name="error-outline" size={48} color={mutedTextColor} />
-        <ThemedText style={[styles.errorText, { color: textColor }]}>{error}</ThemedText>
+        <ThemedText style={[styles.errorText, { color: textColor }]}>
+          {error ?? 'Could not load your dashboard.'}
+        </ThemedText>
         <TouchableOpacity
           style={[styles.retryButton, { backgroundColor: tintColor }]}
-          onPress={handleRetry}
+          onPress={() => load()}
           activeOpacity={0.8}>
           <ThemedText style={styles.retryButtonText}>Retry</ThemedText>
         </TouchableOpacity>
@@ -106,177 +85,64 @@ export default function ParentView() {
     );
   }
 
-  if (!dashboard) {
-    return null;
-  }
+  const children = dashboard.children ?? [];
 
   return (
     <ThemedView style={[styles.container, { backgroundColor }]}>
       <ParentHeader
         parentName={dashboard.parentName ?? 'Parent'}
-        onBackPress={() => router.replace('/login')}
-        onProfilePress={() => router.replace('/login')}
+        onProfilePress={() => setMenuOpen(true)}
       />
 
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          {
-            paddingTop: 16,
-            paddingBottom: insets.bottom + 32,
-          },
+          { paddingTop: 16, paddingBottom: insets.bottom + 32 },
         ]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load('refresh')} />}
         showsVerticalScrollIndicator={false}>
         <ParentSummaryCards
           totalChildren={dashboard.totalChildren ?? 0}
           totalItemsTracked={dashboard.totalItemsTracked ?? 0}
         />
 
-        {(dashboard.totalChildren ?? 0) === 0 ? (
+        {children.length === 0 ? (
           <ThemedView style={[styles.emptyCard, { backgroundColor: cardBgColor, borderColor: tagBgColor }]}>
             <ThemedText style={[styles.emptyTitle, { color: textColor }]}>
               No linked children yet
             </ThemedText>
             <ThemedText style={[styles.emptyBody, { color: mutedTextColor }]}>
-              Ask your school to send you a parent invite code, then tap Parent Access on the sign-up
-              screen to link your account to your child.
+              Your child&apos;s teacher can send you a parent invite code. Each code links your account
+              to one child, so ask for a code for each of your children.
             </ThemedText>
           </ThemedView>
-        ) : null}
+        ) : (
+          children.map((child) => <ChildProgressCard key={child.id} child={child} />)
+        )}
 
-        {/* Student features: Textbooks */}
-        <View style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: mutedTextColor }]}>
-            TEXTBOOKS
-          </ThemedText>
-          <View style={styles.examBoardRow}>
-            {[{ label: 'IGCSE shelf', icon: 'auto-stories' }].map((board) => (
-              <TouchableOpacity
-                key={board.label}
-                style={[styles.examBoardIcon, { borderColor: tintColor, backgroundColor: cardBgColor }]}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push('/igcse');
-                }}
-                activeOpacity={0.8}>
-                <MaterialIcons name={board.icon as any} size={24} color={tintColor} />
-                <ThemedText style={styles.examBoardLabel}>{board.label}</ThemedText>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: mutedTextColor }]}>
-            PRACTICE
-          </ThemedText>
-          <View style={styles.examBoardRow}>
-            {[
-              { label: 'WAEC', icon: 'edit-note' },
-              { label: 'JAMB', icon: 'edit-note' },
-            ].map((item) => (
-              <TouchableOpacity
-                key={item.label}
-                style={[styles.examBoardIcon, { borderColor: tintColor, backgroundColor: cardBgColor }]}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push(
-                    item.label === 'WAEC' ? '/practice/waec' : '/practice/jamb'
-                  );
-                }}
-                activeOpacity={0.8}>
-                <MaterialIcons name={item.icon as any} size={24} color={tintColor} />
-                <ThemedText style={styles.examBoardLabel}>{item.label}</ThemedText>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Progress Tracking */}
         <TouchableOpacity
           style={[styles.featureCard, { borderColor: tagBgColor, backgroundColor: cardBgColor }]}
-          onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+          onPress={() => router.push('/feedback')}
           activeOpacity={0.8}>
-          <MaterialIcons name="trending-up" size={24} color={tintColor} />
+          <MaterialIcons name="support-agent" size={24} color={tintColor} />
           <View style={styles.featureCardContent}>
             <ThemedText style={[styles.featureCardLabel, { color: textColor }]}>
-              Progress Tracking
+              Help & feedback
             </ThemedText>
             <ThemedText style={[styles.featureCardDesc, { color: mutedTextColor }]}>
-              Homework, reading time, quiz scores, study streaks
-            </ThemedText>
-          </View>
-          <MaterialIcons name="chevron-right" size={20} color={tintColor} />
-        </TouchableOpacity>
-
-        {/* Activity Reports */}
-        <TouchableOpacity
-          style={[styles.featureCard, { borderColor: tagBgColor, backgroundColor: cardBgColor }]}
-          onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-          activeOpacity={0.8}>
-          <MaterialIcons name="notifications-active" size={24} color={tintColor} />
-          <View style={styles.featureCardContent}>
-            <ThemedText style={[styles.featureCardLabel, { color: textColor }]}>
-              Activity Reports
-            </ThemedText>
-            <ThemedText style={[styles.featureCardDesc, { color: mutedTextColor }]}>
-              Textbooks opened, pages read, daily/weekly study hours
-            </ThemedText>
-          </View>
-          <MaterialIcons name="chevron-right" size={20} color={tintColor} />
-        </TouchableOpacity>
-
-        {/* Performance Insights */}
-        <TouchableOpacity
-          style={[styles.featureCard, { borderColor: tagBgColor, backgroundColor: cardBgColor }]}
-          onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-          activeOpacity={0.8}>
-          <MaterialIcons name="lightbulb" size={24} color={tintColor} />
-          <View style={styles.featureCardContent}>
-            <ThemedText style={[styles.featureCardLabel, { color: textColor }]}>
-              Performance Insights
-            </ThemedText>
-            <ThemedText style={[styles.featureCardDesc, { color: mutedTextColor }]}>
-              Alerts for low engagement, tips to encourage study
-            </ThemedText>
-          </View>
-          <MaterialIcons name="chevron-right" size={20} color={tintColor} />
-        </TouchableOpacity>
-
-        {/* Child Account Management */}
-        <TouchableOpacity
-          style={[styles.featureCard, { borderColor: tagBgColor, backgroundColor: cardBgColor }]}
-          onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-          activeOpacity={0.8}>
-          <MaterialIcons name="family-restroom" size={24} color={tintColor} />
-          <View style={styles.featureCardContent}>
-            <ThemedText style={[styles.featureCardLabel, { color: textColor }]}>
-              Child Account Management
-            </ThemedText>
-            <ThemedText style={[styles.featureCardDesc, { color: mutedTextColor }]}>
-              Approve downloads, link kids, set screen time limits
-            </ThemedText>
-          </View>
-          <MaterialIcons name="chevron-right" size={20} color={tintColor} />
-        </TouchableOpacity>
-
-        {/* School Updates */}
-        <TouchableOpacity
-          style={[styles.featureCard, { borderColor: tagBgColor, backgroundColor: cardBgColor }]}
-          onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-          activeOpacity={0.8}>
-          <MaterialIcons name="campaign" size={24} color={tintColor} />
-          <View style={styles.featureCardContent}>
-            <ThemedText style={[styles.featureCardLabel, { color: textColor }]}>
-              School & Publisher Updates
-            </ThemedText>
-            <ThemedText style={[styles.featureCardDesc, { color: mutedTextColor }]}>
-              Announcements, curriculum changes, message teachers
+              Tell us what you need to see about your child&apos;s learning, or get help.
             </ThemedText>
           </View>
           <MaterialIcons name="chevron-right" size={20} color={tintColor} />
         </TouchableOpacity>
       </ScrollView>
+
+      <AccountMenu
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        title={dashboard.parentName}
+        subtitle="Parent account"
+      />
     </ThemedView>
   );
 }
@@ -313,37 +179,6 @@ const styles = StyleSheet.create({
     maxWidth: 600,
     alignSelf: 'center',
     width: '100%',
-  },
-  section: {
-    marginBottom: 16,
-    gap: 12,
-  },
-  sectionTitle: {
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1,
-  },
-  examBoardRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  examBoardIcon: {
-    flex: 1,
-    borderRadius: 12,
-    borderWidth: 2,
-    paddingVertical: 12,
-    alignItems: 'center',
-    gap: 6,
-  },
-  examBoardLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  examBoardSubtitle: {
-    fontSize: 10,
-    fontWeight: '600',
-    opacity: 0.75,
   },
   featureCard: {
     flexDirection: 'row',

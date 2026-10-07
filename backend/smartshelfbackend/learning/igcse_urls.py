@@ -6,9 +6,19 @@ Study-agent catalog lives under ``/api/igcse/*`` (see ``igcse_catalog`` app).
 
 from django.urls import path
 
-from learning import views
+from learning import annotation_views, views
 
 urlpatterns = [
+    path(
+        "pdfs/<uuid:asset_pk>/annotations/",
+        annotation_views.PdfAnnotationListCreateView.as_view(),
+        name="protected-pdf-annotations",
+    ),
+    path(
+        "pdfs/<uuid:asset_pk>/annotations/<uuid:pk>/",
+        annotation_views.PdfAnnotationDetailView.as_view(),
+        name="protected-pdf-annotation-detail",
+    ),
     path("bundled/", views.IgcsBundledBookListView.as_view(), name="igcse-bundled-list"),
     path(
         "bundled/<str:book_id>/epub/",

@@ -63,6 +63,8 @@ INSTALLED_APPS = [
     'learning',
     'igcse_catalog',
     'billing',
+    'classroom',
+    'support',
 ]
 
 MIDDLEWARE = [
@@ -157,6 +159,18 @@ MEDIA_ROOT = BASE_DIR / 'media'
 PROTECTED_MEDIA_ROOT = os.getenv(
     'PROTECTED_MEDIA_ROOT', str(BASE_DIR / 'protected_media')
 )
+# "database" keeps uploaded PDFs in Postgres (survives Render redeploys, which
+# wipe the local disk). Defaults to database on Render, filesystem elsewhere.
+PROTECTED_STORAGE_BACKEND = os.getenv(
+    'PROTECTED_STORAGE_BACKEND', 'database' if os.getenv('RENDER') else 'filesystem'
+)
+# Largest school resource PDF accepted by the upload endpoint (MB).
+SCHOOL_RESOURCE_MAX_MB = int(os.getenv('SCHOOL_RESOURCE_MAX_MB', '40'))
+
+# ── Beta support channel (shown in the app's Help & feedback screen) ──────
+SUPPORT_WHATSAPP_NUMBER = os.getenv('SUPPORT_WHATSAPP_NUMBER', '')
+SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'info@smartshelflearn.com')
+SUPPORT_HOURS = os.getenv('SUPPORT_HOURS', 'Mon-Fri, 8am-6pm WAT')
 # Lifetime (seconds) of a signed download token returned by authorize-download.
 PROTECTED_DOWNLOAD_TOKEN_MAX_AGE = int(
     os.getenv('PROTECTED_DOWNLOAD_TOKEN_MAX_AGE', '300')

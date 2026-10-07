@@ -20,6 +20,7 @@ import { ThemedTextInput } from '@/components/themed-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getStayLoggedInPreference } from '@/services/api';
 import { useAuthStore } from '@/src/store/auth';
+import { WrongPortalLink, wrongPortalRole } from '@/src/components/WrongPortalLink';
 
 export default function LoginScreen() {
   const [username, setUsername] = useState('');
@@ -28,6 +29,7 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLocked, setIsLocked] = useState(false);
+  const [portalRole, setPortalRole] = useState<string | null>(null);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const signIn = useAuthStore((s) => s.signIn);
@@ -58,12 +60,14 @@ export default function LoginScreen() {
       return;
     }
     setError(null);
+    setPortalRole(null);
     setIsLocked(false);
     setIsLoading(true);
     try {
-      await signIn(username.trim(), password, { stayLoggedIn });
+      await signIn(username.trim(), password, { stayLoggedIn, portal: 'student' });
       router.replace(getHomeRoute());
     } catch (e: unknown) {
+      setPortalRole(wrongPortalRole(e));
       const err = e as Error & { code?: string };
       if (err.code === 'account_locked') {
         setIsLocked(true);
@@ -152,7 +156,10 @@ export default function LoginScreen() {
                 </ThemedText>
               </View>
             ) : error ? (
-              <ThemedText style={styles.errorText}>{error}</ThemedText>
+              <>
+                <ThemedText style={styles.errorText}>{error}</ThemedText>
+                <WrongPortalLink role={portalRole} />
+              </>
             ) : null}
             <TouchableOpacity
               style={[styles.button, { backgroundColor: buttonBgColor }]}

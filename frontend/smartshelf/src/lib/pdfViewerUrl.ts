@@ -23,11 +23,12 @@ function sameOriginViewerBase(): string {
  * Same-origin PDF.js page for web/Electron.
  * External mozilla.github.io cannot load blob: URLs from localhost/Electron.
  */
-export function buildPdfViewerSrc(pdfUrl: string, page = 1): string {
+export function buildPdfViewerSrc(pdfUrl: string, page = 1, options?: { annotations?: boolean }): string {
   const resolved = resolvePdfFetchUrl(pdfUrl);
   if (!resolved) return '';
   const params = new URLSearchParams();
   params.set('file', resolved);
   if (page > 1) params.set('page', String(page));
+  if (options?.annotations) params.set('annot', '1');
   return `${sameOriginViewerBase()}?${params.toString()}`;
 }

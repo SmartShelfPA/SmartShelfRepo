@@ -76,54 +76,16 @@ export interface TeacherDashboardData {
   progressTrends: TeacherProgressTrend[];
 }
 
-const FALLBACK: TeacherDashboardData = {
-  teacherName: 'Teacher',
-  staffRole: 'Teacher',
-  classes: [
-    {
-      id: 'grade-8a',
-      name: 'Grade 8A',
-      totalStudents: 24,
-      activeThisWeek: 18,
-      avgStudyMinutes: 95,
-      avgCompletionRate: 62,
-      topWeakTopics: ['Algebra', 'Comprehension'],
-    },
-  ],
-  students: [
-    {
-      id: 's1',
-      classId: 'grade-8a',
-      className: 'Grade 8A',
-      name: 'Ada O.',
-      status: 'on_track',
-      lastActiveAt: new Date().toISOString(),
-      booksOpened: 3,
-      chaptersRead: 12,
-      readingMinutes: 120,
-      avgQuizScore: 78,
-      assignmentsSubmitted: 5,
-      strengths: ['Mathematics'],
-      weaknesses: ['English'],
-    },
-  ],
-  assignments: [],
-  interventions: [],
-  notes: [],
-  progressTrends: [
-    { weekLabel: 'Week 1', classAvgScore: 65, classAvgMinutes: 80 },
-    { weekLabel: 'Week 2', classAvgScore: 68, classAvgMinutes: 90 },
-  ],
-};
-
 export async function fetchTeacherDashboard(): Promise<TeacherDashboardData> {
-  try {
-    const res = await apiRequest('/v1/staff/dashboard/');
-    if (!res.ok) throw new Error('Failed to load teacher dashboard');
-    return res.json();
-  } catch {
-    return FALLBACK;
+  const res = await apiRequest('/v1/staff/dashboard/');
+  if (res.status === 403) {
+    throw new Error('This dashboard is only available to teacher accounts.');
   }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Failed to load teacher dashboard');
+  }
+  return res.json();
 }
 
 export async function createTeacherNote(payload: {
