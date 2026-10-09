@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from .models import Assignment, AssignmentAnswer, AssignmentQuestion, AssignmentSubmission
+from .models import (
+    Assignment,
+    AssignmentAnswer,
+    AssignmentQuestion,
+    AssignmentSubmission,
+    Message,
+    MessageThread,
+)
 
 
 class AssignmentQuestionInline(admin.StackedInline):
@@ -27,3 +34,27 @@ class AssignmentSubmissionAdmin(admin.ModelAdmin):
     list_filter = ("status", "assignment__organization")
     search_fields = ("assignment__title", "student__username", "student__full_name")
     inlines = [AssignmentAnswerInline]
+
+
+class MessageInline(admin.TabularInline):
+    model = Message
+    extra = 0
+    readonly_fields = ("sender", "body", "created_at")
+    can_delete = False
+
+
+@admin.register(MessageThread)
+class MessageThreadAdmin(admin.ModelAdmin):
+    """Read-only record of parent–teacher conversations for safeguarding review."""
+
+    list_display = ("parent", "teacher", "student", "organization", "last_message_at")
+    list_filter = ("organization",)
+    search_fields = ("parent__username", "teacher__username", "student__username", "student__full_name")
+    readonly_fields = (
+        "organization", "parent", "teacher", "student", "last_message_at",
+        "parent_last_read_at", "teacher_last_read_at", "created_at",
+    )
+    inlines = [MessageInline]
+
+    def has_add_permission(self, request):
+        return False

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import school_views, views
+from . import messaging_views, school_views, views
 
 urlpatterns = [
     # Teacher
@@ -51,5 +51,19 @@ urlpatterns = [
         "school/resources/<uuid:pk>/",
         school_views.SchoolResourceDetailView.as_view(),
         name="school-resource-detail",
+    ),
+    # Parent ↔ teacher messages
+    path("messages/contacts/", messaging_views.MessageContactsView.as_view(), name="message-contacts"),
+    path("messages/unread/", messaging_views.MessageUnreadCountView.as_view(), name="message-unread"),
+    path("messages/threads/", messaging_views.MessageThreadListCreateView.as_view(), name="message-threads"),
+    path(
+        "messages/threads/<uuid:pk>/",
+        messaging_views.MessageThreadDetailView.as_view(),
+        name="message-thread-detail",
+    ),
+    path(
+        "messages/threads/<uuid:pk>/messages/",
+        messaging_views.MessageReplyView.as_view(),
+        name="message-reply",
     ),
 ]

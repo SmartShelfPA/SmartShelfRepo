@@ -19,6 +19,18 @@ export function formatDue(iso: string | null | undefined): string {
   return `Due ${label}`;
 }
 
+/** "14:05" today, "Yesterday", or "3 Oct" — for message lists. */
+export function formatMessageTime(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) {
+    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+  if (new Date(now.getTime() - DAY_MS).toDateString() === d.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
 export function formatShortDate(iso: string | null | undefined): string {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });

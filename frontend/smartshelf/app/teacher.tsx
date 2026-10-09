@@ -28,6 +28,7 @@ import {
 import { createParentInvite } from '@/src/api/parentInvite';
 import { AccountMenu } from '@/src/components/AccountMenu';
 import { useRequireRole } from '@/src/hooks/useRequireRole';
+import { useUnreadMessages } from '@/src/hooks/useUnreadMessages';
 import { useAuthStore } from '@/src/store/auth';
 
 export default function TeacherView() {
@@ -72,6 +73,8 @@ export default function TeacherView() {
   useEffect(() => {
     if (allowed) load();
   }, [allowed, load]);
+
+  const unreadMessages = useUnreadMessages(allowed);
 
   const filteredStudents = useMemo(() => {
     if (!dashboard) return [];
@@ -162,6 +165,11 @@ export default function TeacherView() {
           {[
             { label: 'New assignment', icon: 'add-task' as const, href: '/staff/assignments/new' as const },
             { label: 'Assignments', icon: 'assignment' as const, href: '/staff/assignments' as const },
+            {
+              label: unreadMessages > 0 ? `Messages (${unreadMessages})` : 'Messages',
+              icon: 'chat' as const,
+              href: '/messages' as const,
+            },
             { label: 'School resources', icon: 'folder-shared' as const, href: '/school/resources' as const },
             ...(user?.is_school_admin
               ? [{ label: 'School admin', icon: 'admin-panel-settings' as const, href: '/school/admin' as const }]

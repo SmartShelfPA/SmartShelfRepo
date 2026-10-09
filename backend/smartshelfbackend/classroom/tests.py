@@ -362,6 +362,103 @@ class FeedbackTests(BaseSchoolTest):
         self.assertEqual(APIClient().get("/api/v1/support/info/").status_code, 200)
 
 
+@override_settings(
+    DEFAULT_FROM_EMAIL="noreply@smartshelf.test",
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+)
+class MessagingTests(BaseSchoolTest):
+    def setUp(self):
+        super().setUp()
+        # A class teacher who isn't a school admin: contactable only once they've set work.
+        self.class_teacher = make_user("ms_bello", UserProfile.Role.STAFF, self.org, staff_role="Maths")
+        self.other_teacher = make_user("other_t", UserProfile.Role.STAFF, self.other_org, is_school_admin=True)
+
+    def _contacts(self, user=None):
+        res = client_for(user or self.parent).get("/api/v1/messages/contacts/")
+        self.assertEqual(res.status_code, 200, res.content)
+        return res.json()["children"]
+
+    def _start(self, teacher, body="Hello, how is Tobi doing?", student=None):
+        return client_for(self.parent).post(
+            "/api/v1/messages/threads/",
+            {"teacher_id": str(teacher.id), "student_id": str((student or self.student).id), "body": body},
+            format="json",
+        )
+
+    def test_contacts_are_childs_teachers_only(self):
+        ids = {t["id"] for t in self._contacts()[0]["teachers"]}
+        self.assertEqual(ids, {str(self.teacher.id)})  # school admin only, until work is set
+
+        res = client_for(self.class_teacher).post(
+            "/api/v1/staff/assignments/",
+            {"title": "Fractions", "kind": "questions", "target_class": "SS2A",
+             "questions": [{"kind": "theory", "prompt": "Explain halves."}]},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201, res.content)
+        ids = {t["id"] for t in self._contacts()[0]["teachers"]}
+        self.assertEqual(ids, {str(self.teacher.id), str(self.class_teacher.id)})
+        self.assertNotIn(str(self.other_teacher.id), ids)
+
+    def test_conversation_flow_and_unread(self):
+        from django.core import mail
+
+        with self.captureOnCommitCallbacks(execute=True):
+            res = self._start(self.teacher)
+        self.assertEqual(res.status_code, 201, res.content)
+        thread_id = res.json()["id"]
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertNotIn("how is Tobi doing", mail.outbox[0].body)  # no message content in email
+
+        # A second message before the teacher reads doesn't send another email.
+        with self.captureOnCommitCallbacks(execute=True):
+            client_for(self.parent).post(
+                f"/api/v1/messages/threads/{thread_id}/messages/", {"body": "Also, homework?"}, format="json"
+            )
+        self.assertEqual(len(mail.outbox), 1)
+
+        teacher = client_for(self.teacher)
+        self.assertEqual(teacher.get("/api/v1/messages/unread/").json()["unread"], 2)
+        detail = teacher.get(f"/api/v1/messages/threads/{thread_id}/").json()
+        self.assertEqual(len(detail["messages"]), 2)
+        self.assertTrue(detail["can_reply"])
+        self.assertEqual(teacher.get("/api/v1/messages/unread/").json()["unread"], 0)
+
+        res = teacher.post(f"/api/v1/messages/threads/{thread_id}/messages/", {"body": "Doing well!"}, format="json")
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertEqual(client_for(self.parent).get("/api/v1/messages/unread/").json()["unread"], 1)
+
+        # Same parent, teacher and child reuse the conversation.
+        self.assertEqual(self._start(self.teacher, body="One more").json()["id"], thread_id)
+
+    def test_access_is_limited_to_participants(self):
+        thread_id = self._start(self.teacher).json()["id"]
+        for outsider in (self.class_teacher, self.student, self.other_teacher):
+            res = client_for(outsider).get(f"/api/v1/messages/threads/{thread_id}/")
+            self.assertIn(res.status_code, (403, 404))
+        other_parent = make_user("parent2", UserProfile.Role.PARENT, self.org)
+        self.assertEqual(client_for(other_parent).get(f"/api/v1/messages/threads/{thread_id}/").status_code, 404)
+
+    def test_parent_cannot_message_unrelated_teacher_or_child(self):
+        self.assertEqual(self._start(self.other_teacher).status_code, 400)
+        self.assertEqual(self._start(self.class_teacher).status_code, 400)  # hasn't set work yet
+        self.assertEqual(self._start(self.teacher, student=self.student2).status_code, 400)
+        res = client_for(self.teacher).post(
+            "/api/v1/messages/threads/",
+            {"teacher_id": str(self.teacher.id), "student_id": str(self.student.id), "body": "Hi"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 403)
+
+    def test_unlinked_parent_cannot_post(self):
+        thread_id = self._start(self.teacher).json()["id"]
+        self.parent.managed_students.remove(self.student)
+        res = client_for(self.parent).post(
+            f"/api/v1/messages/threads/{thread_id}/messages/", {"body": "Hi"}, format="json"
+        )
+        self.assertEqual(res.status_code, 403)
+
+
 class SetupBetaSchoolCommandTests(TestCase):
     def test_demo_setup_is_idempotent(self):
         out = io.StringIO()

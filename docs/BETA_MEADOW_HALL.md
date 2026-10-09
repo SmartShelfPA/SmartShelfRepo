@@ -104,6 +104,29 @@ marked the work, because students can resubmit until then.
 **Parents**: per-child progress, assignments and scores, practice stats and
 teacher feedback.
 
+### Parent ↔ teacher messages
+
+Parents message their child's teachers from **Messages** on the parent home,
+or "Message <child>'s teacher" on each child's card. Teachers reply from the
+**Messages** tile on the teacher home.
+
+- **Who a parent can message:** teachers who have set work for the child or
+  the child's class, plus the school admins. That way there is always someone
+  to contact, even before any work has been set. Teachers at other schools
+  never appear.
+- **Conversations:** one per parent, teacher and child. Only parents start
+  conversations; teachers reply.
+- **Notifications:** the recipient gets an email saying who wrote and about
+  which child, with no message text. Only one email is sent until they open
+  the conversation. This needs `DEFAULT_FROM_EMAIL` and email sending
+  configured. There are no push notifications yet.
+- **Unread counts:** shown on the parent's Messages card and the teacher's
+  Messages tile.
+- **Safeguarding:** every conversation is kept and can be read in Django admin
+  under **Classroom > Message threads**. Admin access is read-only.
+- **When replies are blocked:** a parent can't post if they're no longer
+  linked to the child or the teacher's account is deactivated.
+
 ### School content segregation
 
 School resources belong to one school. Only members of that school can list

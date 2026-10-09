@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 import { ThemedText } from '@/components/themed-text';
@@ -20,7 +20,13 @@ const ASSIGNMENT_STATUS: Record<AssignmentStatus, string> = {
   graded: 'Marked',
 };
 
-export function ChildProgressCard({ child }: { child: ParentChild }) {
+export function ChildProgressCard({
+  child,
+  onMessageTeacher,
+}: {
+  child: ParentChild;
+  onMessageTeacher?: () => void;
+}) {
   const isDark = useColorScheme() === 'dark';
   const cardBg = isDark ? '#1F1F1F' : '#FFFFFF';
   const border = isDark ? '#2A2A2A' : '#E5E5E5';
@@ -136,6 +142,17 @@ export function ChildProgressCard({ child }: { child: ParentChild }) {
           ))}
         </Section>
       ) : null}
+
+      {child.schoolName && onMessageTeacher ? (
+        <TouchableOpacity
+          style={[styles.messageBtn, { borderColor: border }]}
+          onPress={onMessageTeacher}
+          activeOpacity={0.8}
+          accessibilityRole="button">
+          <MaterialIcons name="chat-bubble-outline" size={18} color={isDark ? '#fff' : '#00C832'} />
+          <ThemedText style={styles.messageBtnText}>Message {child.name.split(' ')[0]}&apos;s teacher</ThemedText>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -177,4 +194,14 @@ const styles = StyleSheet.create({
   lineRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   barTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
   barFill: { height: 6, borderRadius: 3, backgroundColor: '#00C832' },
+  messageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+  },
+  messageBtnText: { fontWeight: '700', fontSize: 14 },
 });

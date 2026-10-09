@@ -161,3 +161,52 @@ class AssignmentAnswer(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["submission", "question"], name="classroom_unique_answer")
         ]
+
+
+class MessageThread(models.Model):
+    """A private conversation between one parent and one teacher about one child."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="message_threads"
+    )
+    parent = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="parent_threads"
+    )
+    teacher = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="teacher_threads"
+    )
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+"
+    )
+    last_message_at = models.DateTimeField(null=True, blank=True)
+    parent_last_read_at = models.DateTimeField(null=True, blank=True)
+    teacher_last_read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-last_message_at", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["parent", "teacher", "student"], name="classroom_unique_message_thread"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.parent} ↔ {self.teacher} ({self.student})"
+
+
+class Message(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    thread = models.ForeignKey(MessageThread, on_delete=models.CASCADE, related_name="messages")
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="+"
+    )
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return self.body[:40]

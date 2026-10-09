@@ -20,6 +20,7 @@ import { ParentHeader, ParentSummaryCards } from '@/src/components/parent';
 import { ChildProgressCard } from '@/src/components/parent/ChildProgressCard';
 import { AccountMenu } from '@/src/components/AccountMenu';
 import { useRequireRole } from '@/src/hooks/useRequireRole';
+import { useUnreadMessages } from '@/src/hooks/useUnreadMessages';
 
 export default function ParentView() {
   const allowed = useRequireRole(['parent']);
@@ -56,6 +57,8 @@ export default function ParentView() {
   useEffect(() => {
     if (allowed) void load();
   }, [allowed, load]);
+
+  const unread = useUnreadMessages(allowed);
 
   if (!allowed || loading) {
     return (
@@ -117,8 +120,37 @@ export default function ParentView() {
             </ThemedText>
           </ThemedView>
         ) : (
-          children.map((child) => <ChildProgressCard key={child.id} child={child} />)
+          children.map((child) => (
+            <ChildProgressCard
+              key={child.id}
+              child={child}
+              onMessageTeacher={() =>
+                router.push({ pathname: '/messages/new', params: { studentId: child.id } })
+              }
+            />
+          ))
         )}
+
+        <TouchableOpacity
+          style={[styles.featureCard, { borderColor: tagBgColor, backgroundColor: cardBgColor }]}
+          onPress={() => router.push('/messages')}
+          activeOpacity={0.8}>
+          <MaterialIcons name="chat" size={24} color={tintColor} />
+          <View style={styles.featureCardContent}>
+            <ThemedText style={[styles.featureCardLabel, { color: textColor }]}>Messages</ThemedText>
+            <ThemedText style={[styles.featureCardDesc, { color: mutedTextColor }]}>
+              {unread > 0
+                ? `${unread} unread ${unread === 1 ? 'message' : 'messages'} from teachers`
+                : "Talk to your child's teachers"}
+            </ThemedText>
+          </View>
+          {unread > 0 ? (
+            <View style={styles.unreadBadge}>
+              <ThemedText style={styles.unreadBadgeText}>{unread}</ThemedText>
+            </View>
+          ) : null}
+          <MaterialIcons name="chevron-right" size={20} color={tintColor} />
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.featureCard, { borderColor: tagBgColor, backgroundColor: cardBgColor }]}
@@ -209,4 +241,14 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 16, fontWeight: '700' },
   emptyBody: { fontSize: 14, lineHeight: 20 },
+  unreadBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#00FF41',
+  },
+  unreadBadgeText: { color: '#000', fontSize: 12, fontWeight: '800' },
 });
