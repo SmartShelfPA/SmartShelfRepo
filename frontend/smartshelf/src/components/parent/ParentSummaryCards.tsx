@@ -8,13 +8,11 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 export interface ParentSummaryCardsProps {
   totalChildren: number;
   totalItemsTracked: number;
-  lowStockShelves?: number;
 }
 
 export function ParentSummaryCards({
   totalChildren,
   totalItemsTracked,
-  lowStockShelves = 0,
 }: ParentSummaryCardsProps) {
   const colorScheme = useColorScheme();
   const textColor = useThemeColor({}, 'text');
@@ -33,11 +31,6 @@ export function ParentSummaryCards({
       icon: 'inventory-2' as const,
       value: totalItemsTracked,
       label: 'Items Tracked',
-    },
-    {
-      icon: 'warning' as const,
-      value: lowStockShelves,
-      label: 'Low Stock Shelves',
     },
   ];
 
