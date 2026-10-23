@@ -11,17 +11,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useNowReadingStore } from '@/src/store/nowReading';
+import { useRequireAuth } from '@/src/hooks/useRequireRole';
 import { buildPdfViewerSrc } from '@/src/lib/pdfViewerUrl';
 
 /** Web/Electron PDF viewer — same-origin PDF.js iframe. */
 export default function PdfViewerScreen() {
+  const signedIn = useRequireAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const iconColor = useThemeColor({}, 'text');
   const bgColor = useThemeColor({}, 'background');
   const { url, title } = useLocalSearchParams<{ url?: string; title?: string }>();
   const source = (url ?? '').trim();
-  const [ready, setReady] = useState(false);
+  const [viewerReady, setViewerReady] = useState(false);
 
   useEffect(() => {
     if (!title && !source) return;
@@ -38,8 +40,10 @@ export default function PdfViewerScreen() {
   const viewerSrc = useMemo(() => (source ? buildPdfViewerSrc(source) : ''), [source]);
 
   useEffect(() => {
-    setReady(Boolean(viewerSrc));
+    setViewerReady(Boolean(viewerSrc));
   }, [viewerSrc]);
+
+  if (!signedIn) return null;
 
   if (!source) {
     return (
@@ -63,7 +67,7 @@ export default function PdfViewerScreen() {
         </Text>
       </View>
       <View style={styles.frameWrap}>
-        {ready ? (
+        {viewerReady ? (
           <iframe src={viewerSrc} title={title ?? 'PDF'} style={styles.frame as object} />
         ) : (
           <View style={styles.center}>

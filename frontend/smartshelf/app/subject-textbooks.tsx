@@ -10,8 +10,10 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Textbook } from '@/components/textbook-preview-list';
 import { Image } from 'expo-image';
+import { useRequireAuth } from '@/src/hooks/useRequireRole';
 
 export default function SubjectTextbooksScreen() {
+  const ready = useRequireAuth();
   const params = useLocalSearchParams();
   const subject = (params.subject as string) || 'Unknown';
   const router = useRouter();
@@ -137,6 +139,8 @@ export default function SubjectTextbooksScreen() {
       </View>
     </TouchableOpacity>
   );
+
+  if (!ready) return null;
 
   return (
     <ThemedView style={[styles.container, { backgroundColor }]}>

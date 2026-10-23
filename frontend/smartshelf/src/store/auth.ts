@@ -16,6 +16,7 @@ import {
   UserProfile,
 } from '@/services/api';
 import { getHomeHref } from '@/src/lib/navigation';
+import { clearReturnTo } from '@/src/lib/returnTo';
 import {
   clearPortalChoice,
   getPortalChoice,
@@ -38,7 +39,7 @@ type AuthState = {
   ) => Promise<void>;
   signUp: (payload: RegisterPayload) => Promise<void>;
   refreshProfile: () => Promise<void>;
-  signOut: () => Promise<void>;
+  signOut: (options?: { keepReturnTo?: boolean }) => Promise<void>;
   getHomeRoute: () => Href;
 };
 
@@ -132,7 +133,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  signOut: async () => {
+  signOut: async (options) => {
+    if (!options?.keepReturnTo) clearReturnTo();
     await removeToken();
     await clearPortalChoice();
     set({ token: null, user: null, isAuthenticated: false, portalChoice: null });

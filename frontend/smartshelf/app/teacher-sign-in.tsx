@@ -20,6 +20,7 @@ import { PasswordInput } from '@/components/password-input';
 import { ThemedTextInput } from '@/components/themed-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getStayLoggedInPreference } from '@/services/api';
+import { resolvePostAuthHref } from '@/src/lib/returnTo';
 import { useAuthStore } from '@/src/store/auth';
 import { WrongPortalLink, wrongPortalRole } from '@/src/components/WrongPortalLink';
 
@@ -52,7 +53,7 @@ export default function TeacherSignInScreen() {
 
   useEffect(() => {
     if (!isHydrating && isAuthenticated && user?.role === 'staff') {
-      router.replace('/teacher');
+      router.replace(resolvePostAuthHref('/teacher'));
     }
   }, [isHydrating, isAuthenticated, user?.role, router]);
 
@@ -69,13 +70,13 @@ export default function TeacherSignInScreen() {
       await signIn(username.trim(), password, { stayLoggedIn, portal: 'staff' });
       const role = useAuthStore.getState().user?.role;
       if (role !== 'staff') {
-        await useAuthStore.getState().signOut();
+        await useAuthStore.getState().signOut({ keepReturnTo: true });
         setError(
           'This account is not a teacher account. Ask your school admin to create or approve your teacher access.'
         );
         return;
       }
-      router.replace(getHomeRoute());
+      router.replace(resolvePostAuthHref(getHomeRoute()));
     } catch (e: unknown) {
       setPortalRole(wrongPortalRole(e));
       setError(e instanceof Error ? e.message : 'Sign in failed');

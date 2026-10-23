@@ -21,6 +21,7 @@ import {
   verifyParentInviteCode,
   type ParentInvitePreview,
 } from '@/src/api/parentInvite';
+import { resolvePostAuthHref } from '@/src/lib/returnTo';
 import { useAuthStore } from '@/src/store/auth';
 
 type Step = 'code' | 'account';
@@ -100,7 +101,7 @@ export default function RegisterParentScreen() {
         user: result.user,
         isAuthenticated: true,
       });
-      router.replace(getHomeRoute());
+      router.replace(resolvePostAuthHref(getHomeRoute()));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Registration failed');
     } finally {

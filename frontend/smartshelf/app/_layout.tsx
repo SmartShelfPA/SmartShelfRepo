@@ -9,6 +9,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePhonePortraitLock } from '@/src/hooks/usePhonePortraitLock';
 import { AuthBootstrap } from '@/src/components/AuthBootstrap';
 import { DesktopShell } from '@/src/components/DesktopShell';
+import { WebAppShell } from '@/src/components/WebAppShell';
 import { ErrorBoundary } from '@/src/components/ErrorBoundary';
 import { installGlobalErrorHandlers } from '@/src/lib/errorReporter';
 
@@ -24,6 +25,7 @@ export default function RootLayout() {
     <ErrorBoundary>
     <SafeAreaProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <WebAppShell />
         <DesktopShell>
         <AuthBootstrap>
         <Stack initialRouteName="index">

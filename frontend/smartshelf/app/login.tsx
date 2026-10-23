@@ -19,6 +19,7 @@ import { PasswordInput } from '@/components/password-input';
 import { ThemedTextInput } from '@/components/themed-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getStayLoggedInPreference } from '@/services/api';
+import { resolvePostAuthHref } from '@/src/lib/returnTo';
 import { useAuthStore } from '@/src/store/auth';
 import { WrongPortalLink, wrongPortalRole } from '@/src/components/WrongPortalLink';
 
@@ -48,7 +49,7 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (!isHydrating && isAuthenticated) {
-      router.replace(getHomeRoute());
+      router.replace(resolvePostAuthHref(getHomeRoute()));
     }
   }, [isHydrating, isAuthenticated, router, getHomeRoute]);
 
@@ -65,7 +66,7 @@ export default function LoginScreen() {
     setIsLoading(true);
     try {
       await signIn(username.trim(), password, { stayLoggedIn, portal: 'student' });
-      router.replace(getHomeRoute());
+      router.replace(resolvePostAuthHref(getHomeRoute()));
     } catch (e: unknown) {
       setPortalRole(wrongPortalRole(e));
       const err = e as Error & { code?: string };
