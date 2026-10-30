@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { usePathname } from 'expo-router';
 
+import { InstallAppBanner } from '@/src/components/InstallAppBanner';
+
 function ensureMeta(name: string, content: string) {
   let tag = document.querySelector(`meta[name="${name}"]`);
   if (!tag) {
@@ -42,5 +44,5 @@ export function WebAppShell() {
     navigator.serviceWorker.register('/sw.js').catch(() => undefined);
   }, []);
 
-  return null;
+  return <InstallAppBanner />;
 }
