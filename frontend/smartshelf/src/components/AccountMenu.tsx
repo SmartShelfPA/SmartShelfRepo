@@ -26,6 +26,7 @@ type Props = {
 export function AccountMenu({ visible, onClose, title, subtitle, extraItems = [] }: Props) {
   const router = useRouter();
   const signOut = useAuthStore((s) => s.signOut);
+  const openNavTutorial = useAuthStore((s) => s.openNavTutorial);
   const isDark = useColorScheme() === 'dark';
   const sheetBg = isDark ? '#1F1F1F' : '#FFFFFF';
   const borderColor = isDark ? '#2A2A2A' : '#E5E5E5';
@@ -34,6 +35,7 @@ export function AccountMenu({ visible, onClose, title, subtitle, extraItems = []
 
   const items: AccountMenuItem[] = [
     ...extraItems,
+    { id: 'tour', label: 'Show me around', icon: 'explore', onPress: openNavTutorial },
     { id: 'help', label: 'Help & feedback', icon: 'support-agent', href: '/feedback' },
     { id: 'privacy', label: 'Privacy & data', icon: 'privacy-tip', href: '/privacy-data' },
   ];

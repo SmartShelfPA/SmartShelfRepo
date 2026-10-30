@@ -100,6 +100,7 @@ export default function RegisterParentScreen() {
         token: result.token,
         user: result.user,
         isAuthenticated: true,
+        navTutorialRequest: 'signin',
       });
       router.replace(resolvePostAuthHref(getHomeRoute()));
     } catch (e: unknown) {

@@ -24,12 +24,16 @@ import {
   type PortalChoice,
 } from '@/src/lib/portalChoice';
 
+/** `signin` is set only by a fresh sign-in or registration, never by restoring a saved session. */
+export type NavTutorialRequest = 'off' | 'signin' | 'replay';
+
 type AuthState = {
   token: string | null;
   user: UserProfile | null;
   portalChoice: PortalChoice | null;
   isHydrating: boolean;
   isAuthenticated: boolean;
+  navTutorialRequest: NavTutorialRequest;
   initialize: () => Promise<void>;
   choosePortal: (choice: PortalChoice) => Promise<void>;
   signIn: (
@@ -40,6 +44,8 @@ type AuthState = {
   signUp: (payload: RegisterPayload) => Promise<void>;
   refreshProfile: () => Promise<void>;
   signOut: (options?: { keepReturnTo?: boolean }) => Promise<void>;
+  openNavTutorial: () => void;
+  closeNavTutorial: () => void;
   getHomeRoute: () => Href;
 };
 
@@ -49,6 +55,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   portalChoice: null,
   isHydrating: true,
   isAuthenticated: false,
+  navTutorialRequest: 'off',
 
   initialize: async () => {
     set({ isHydrating: true });
@@ -109,14 +116,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const result = await login(username, password, { persist, portal: options?.portal });
     const token = result?.token ?? (await getToken());
     const user = result?.user ?? (await getStoredProfile());
-    set({ token, user, isAuthenticated: true });
+    set({ token, user, isAuthenticated: true, navTutorialRequest: 'signin' });
   },
 
   signUp: async (payload) => {
     const result = await register(payload, { persist: true });
     const token = result?.token ?? (await getToken());
     const user = result?.user ?? (await getStoredProfile());
-    set({ token, user, isAuthenticated: true });
+    set({ token, user, isAuthenticated: true, navTutorialRequest: 'signin' });
   },
 
   refreshProfile: async () => {
@@ -137,8 +144,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!options?.keepReturnTo) clearReturnTo();
     await removeToken();
     await clearPortalChoice();
-    set({ token: null, user: null, isAuthenticated: false, portalChoice: null });
+    set({
+      token: null,
+      user: null,
+      isAuthenticated: false,
+      portalChoice: null,
+      navTutorialRequest: 'off',
+    });
   },
+
+  openNavTutorial: () => set({ navTutorialRequest: 'replay' }),
+
+  closeNavTutorial: () => set({ navTutorialRequest: 'off' }),
 
   getHomeRoute: () => {
     const { user, portalChoice } = get();
