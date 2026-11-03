@@ -7,9 +7,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useRequireAuth } from '@/src/hooks/useRequireRole';
 import { getBookById } from '@/src/store/books';
 
 export default function BookDetailScreen() {
+  const ready = useRequireAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams();
@@ -36,6 +38,8 @@ export default function BookDetailScreen() {
     }
     await Linking.openURL(book.pdfUri);
   };
+
+  if (!ready) return null;
 
   if (!book) {
     return (

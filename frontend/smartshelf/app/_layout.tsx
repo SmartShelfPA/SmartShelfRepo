@@ -8,7 +8,9 @@ import { useEffect } from 'react';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { usePhonePortraitLock } from '@/src/hooks/usePhonePortraitLock';
 import { AuthBootstrap } from '@/src/components/AuthBootstrap';
+import { NavTutorial } from '@/src/components/NavTutorial';
 import { DesktopShell } from '@/src/components/DesktopShell';
+import { WebAppShell } from '@/src/components/WebAppShell';
 import { ErrorBoundary } from '@/src/components/ErrorBoundary';
 import { installGlobalErrorHandlers } from '@/src/lib/errorReporter';
 
@@ -24,6 +26,7 @@ export default function RootLayout() {
     <ErrorBoundary>
     <SafeAreaProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <WebAppShell />
         <DesktopShell>
         <AuthBootstrap>
         <Stack initialRouteName="index">
@@ -55,6 +58,7 @@ export default function RootLayout() {
           <Stack.Screen name="downloads" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
+        <NavTutorial />
         </AuthBootstrap>
         </DesktopShell>
         <StatusBar style="auto" />

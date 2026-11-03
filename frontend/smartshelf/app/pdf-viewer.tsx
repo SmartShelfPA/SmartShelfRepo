@@ -19,6 +19,7 @@ import {
   addAnnotation,
   type PdfAnnotation,
 } from '@/services/pdf-annotations';
+import { useRequireAuth } from '@/src/hooks/useRequireRole';
 
 const PDF_JS_VIEWER = 'https://mozilla.github.io/pdf.js/web/viewer.html';
 const GOOGLE_DOCS_VIEWER = 'https://docs.google.com/gview?embedded=true';
@@ -186,6 +187,7 @@ true;
 `;
 
 export default function PdfViewerScreen() {
+  const ready = useRequireAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const iconColor = useThemeColor({}, 'text');
@@ -302,6 +304,8 @@ export default function PdfViewerScreen() {
       mounted = false;
     };
   }, [pdfUri, viewerUrl, useGoogleDocsFallback]);
+
+  if (!ready) return null;
 
   if (!pdfUri) {
     return (

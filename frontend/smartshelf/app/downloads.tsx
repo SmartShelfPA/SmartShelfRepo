@@ -22,6 +22,7 @@ import {
   removeDownload,
   type ProtectedDownloadRecord,
 } from '@/src/lib/secureDownloadStore';
+import { useRequireAuth } from '@/src/hooks/useRequireRole';
 import { prepareProtectedOpen } from '@/src/lib/protectedPdfAccess';
 
 function formatSize(bytes?: number): string {
@@ -31,6 +32,7 @@ function formatSize(bytes?: number): string {
 }
 
 export default function DownloadsScreen() {
+  const ready = useRequireAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const theme = useIgcsScreenTheme();
@@ -135,6 +137,8 @@ export default function DownloadsScreen() {
     },
     [theme, handleOpen, handleRemove]
   );
+
+  if (!ready) return null;
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: theme.backgroundColor }]}>

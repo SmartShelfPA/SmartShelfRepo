@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Image, Platform, StyleSheet, View } from 'react-native';
+import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 import { useAuthStore } from '@/src/store/auth';
 
 type Props = {
@@ -28,6 +28,7 @@ export function AuthBootstrap({ children }: Props) {
           style={styles.logo}
           resizeMode="contain"
         />
+        <Text style={styles.label}>Loading…</Text>
       </View>
     );
   }
@@ -45,5 +46,10 @@ const styles = StyleSheet.create({
   logo: {
     width: 180,
     height: 180,
+  },
+  label: {
+    marginTop: 12,
+    color: '#FFFFFF',
+    fontSize: 16,
   },
 });

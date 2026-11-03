@@ -469,7 +469,7 @@ export default function BookshelfScreen() {
                   <TouchableOpacity
                     key={collection.id}
                     style={[styles.collectionCard, { backgroundColor: cardBgColor, borderColor: tagBgColor }]}
-                    onPress={() => setActiveCollectionId(collection.id)}
+                    onPress={() => router.push(`/shelf/${collection.id}`)}
                     activeOpacity={0.8}>
                     <View>
                       <ThemedText style={styles.collectionName}>{collection.name}</ThemedText>

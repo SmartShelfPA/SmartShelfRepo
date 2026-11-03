@@ -21,6 +21,7 @@ import { ThemedTextInput } from '@/components/themed-text-input';
 import { Colors } from '@/constants/theme';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { resolvePostAuthHref } from '@/src/lib/returnTo';
 import { useAuthStore } from '@/src/store/auth';
 import {
   fetchOrganizations,
@@ -269,7 +270,7 @@ export default function RegisterScreen() {
         terms_accepted: true,
         analytics_consent: analyticsConsent,
       });
-      router.replace(getHomeRoute());
+      router.replace(resolvePostAuthHref(getHomeRoute()));
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Registration failed';
       setRegisterError(message);

@@ -19,6 +19,7 @@ import { PasswordInput } from '@/components/password-input';
 import { ThemedTextInput } from '@/components/themed-text-input';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { getStayLoggedInPreference } from '@/services/api';
+import { resolvePostAuthHref } from '@/src/lib/returnTo';
 import { useAuthStore } from '@/src/store/auth';
 import { WrongPortalLink, wrongPortalRole } from '@/src/components/WrongPortalLink';
 
@@ -50,7 +51,7 @@ export default function ParentSignInScreen() {
 
   useEffect(() => {
     if (!isHydrating && isAuthenticated && user?.role === 'parent') {
-      router.replace('/parent');
+      router.replace(resolvePostAuthHref('/parent'));
     }
   }, [isHydrating, isAuthenticated, user?.role, router]);
 
@@ -67,11 +68,11 @@ export default function ParentSignInScreen() {
       await signIn(username.trim(), password, { stayLoggedIn, portal: 'parent' });
       const role = useAuthStore.getState().user?.role;
       if (role !== 'parent') {
-        await signOut();
+        await signOut({ keepReturnTo: true });
         setError('This account is not a parent account. Use an invite code to create a parent account.');
         return;
       }
-      router.replace(getHomeRoute());
+      router.replace(resolvePostAuthHref(getHomeRoute()));
     } catch (e: unknown) {
       setPortalRole(wrongPortalRole(e));
       setError(e instanceof Error ? e.message : 'Sign in failed');

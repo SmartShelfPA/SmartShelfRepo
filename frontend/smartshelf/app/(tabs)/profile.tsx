@@ -30,6 +30,7 @@ export default function ProfileScreen() {
   const isHydrating = useAuthStore((state) => state.isHydrating);
   const refreshProfile = useAuthStore((state) => state.refreshProfile);
   const signOut = useAuthStore((state) => state.signOut);
+  const openNavTutorial = useAuthStore((state) => state.openNavTutorial);
   const { avatarUri, userInitials, displayName, saveFromPickerUri } = useProfileAvatar();
   const [showAchievements, setShowAchievements] = useState(false);
   const [showPrices, setShowPrices] = useState(false);
@@ -106,6 +107,10 @@ export default function ProfileScreen() {
 
         <View style={styles.actionList}>
           {[
+            {
+              label: 'APP TOUR',
+              action: () => openNavTutorial(),
+            },
             {
               label: 'SWITCH ACCOUNT',
               action: async () => {

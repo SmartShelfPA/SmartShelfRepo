@@ -1,7 +1,10 @@
 import { Stack } from 'expo-router';
 
+import { RequireAuth } from '@/src/hooks/useRequireRole';
+
 export default function IgcsLayout() {
   return (
+    <RequireAuth>
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="books/index" />
@@ -16,5 +19,6 @@ export default function IgcsLayout() {
       <Stack.Screen name="pdf-reader" />
       <Stack.Screen name="annotate" options={{ gestureEnabled: false }} />
     </Stack>
+    </RequireAuth>
   );
 }
