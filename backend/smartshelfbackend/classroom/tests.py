@@ -212,6 +212,58 @@ class AssignmentFlowTests(BaseSchoolTest):
         self.assertEqual(out["submission"]["status"], "graded")
         self.assertEqual(out["submission"]["score_percent"], 100.0)
 
+    def test_mixed_papers_keep_each_diagram(self):
+        triangle = (
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">'
+            '<polygon points="1,9 5,1 9,9"/></svg>'
+        )
+        graph = "https://cdn.example.com/parabola.png"
+        unsafe = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+        options = [{"id": "A", "label": "18 cm"}, {"id": "B", "label": "12 cm"}]
+        res = client_for(self.teacher).post(
+            "/api/v1/staff/assignments/",
+            {
+                "title": "Mixed maths papers",
+                "kind": "questions",
+                "target_class": "SS2A",
+                "questions": [
+                    {
+                        "kind": "mcq",
+                        "prompt": "What is the perimeter of the triangle in the diagram?",
+                        "diagram_url": triangle,
+                        "review_label": "WAEC Mathematics 2011",
+                        "options": options,
+                        "correct_option_id": "A",
+                    },
+                    {
+                        "kind": "mcq",
+                        "prompt": "Which equation matches the graph?",
+                        "diagram_url": graph,
+                        "review_label": "WAEC Mathematics 2013",
+                        "options": [{"id": "A", "label": "y = x^2"}, {"id": "B", "label": "y = -x^2"}],
+                        "correct_option_id": "A",
+                    },
+                    {
+                        "kind": "mcq",
+                        "prompt": "Ignore a broken figure.",
+                        "diagram_url": unsafe,
+                        "options": options,
+                        "correct_option_id": "B",
+                    },
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201, res.content)
+        detail = client_for(self.student).get(f"/api/v1/student/assignments/{res.json()['id']}/").json()
+        first, second, third = detail["questions"]
+        self.assertEqual(first["diagram_url"], triangle)
+        self.assertEqual(first["review_label"], "WAEC Mathematics 2011")
+        self.assertEqual(second["diagram_url"], graph)
+        self.assertEqual(second["review_label"], "WAEC Mathematics 2013")
+        self.assertEqual(third["diagram_url"], "")
+        self.assertNotIn("correct_option_id", first)
+
     def test_practice_assignment_uses_completed_session(self):
         res = client_for(self.teacher).post(
             "/api/v1/staff/assignments/",

@@ -131,9 +131,12 @@ class StaffAssignmentListCreateView(APIView):
                 order=idx,
                 kind=q["kind"],
                 prompt=q["prompt"].strip(),
+                diagram_url=q.get("diagram_url") or "",
                 options=q.get("options") or [],
                 correct_option_id=q.get("correct_option_id") or "",
                 marking_guide=(q.get("marking_guide") or "").strip(),
+                review_label=(q.get("review_label") or "").strip(),
+                review_page=q.get("review_page"),
                 max_marks=q.get("max_marks") or 1,
             )
         AssignmentSubmission.objects.bulk_create(

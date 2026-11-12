@@ -1,7 +1,59 @@
 from __future__ import annotations
 
 import html
+import re
 from typing import Any
+
+_DIAGRAM_MAX = 8000
+_EMPTY_DIAGRAM = {"", "null", "none", "n/a", "nil", "undefined"}
+_UNSAFE_SVG = re.compile(r"<script|javascript:|on\w+\s*=", re.IGNORECASE)
+_IMG_SRC = re.compile(r"""<img\b[^>]*\ssrc=["']([^"']+)["']""", re.IGNORECASE)
+
+
+def clean_diagram(value: object) -> str:
+    """Keep a remote figure, a data-uri image, or a plain SVG diagram."""
+    if not isinstance(value, str):
+        return ""
+    raw = value.strip()
+    if not raw or raw.lower() in _EMPTY_DIAGRAM:
+        return ""
+    if raw.lower().startswith("<svg") and raw.lower().endswith("</svg>") and len(raw) <= _DIAGRAM_MAX:
+        if _UNSAFE_SVG.search(raw):
+            return ""
+        return raw
+    if raw.startswith("//"):
+        raw = f"https:{raw}"
+    if re.match(r"^https?://", raw, re.IGNORECASE) and len(raw) <= 2000:
+        return raw
+    if raw.lower().startswith("data:image/") and len(raw) <= _DIAGRAM_MAX:
+        return raw
+    return ""
+
+
+def _diagram_from_raw(raw: dict[str, Any], prompt_html: str) -> str:
+    for key in ("diagram_url", "diagramUrl", "image", "image_url", "imageUrl", "figure"):
+        found = clean_diagram(raw.get(key))
+        if found:
+            return found
+    match = _IMG_SRC.search(prompt_html or "")
+    if match:
+        return clean_diagram(match.group(1))
+    return ""
+
+
+def _year_from_raw(raw: dict[str, Any], fallback: int) -> int:
+    for key in ("year", "examyear", "exam_year"):
+        value = raw.get(key)
+        if value is None or value == "":
+            continue
+        try:
+            year = int(value)
+        except (TypeError, ValueError):
+            continue
+        if 1980 <= year <= 2100:
+            return year
+    return fallback
+
 
 def normalize_html_fragment(text: str | None) -> str:
     """Expose HTML fragment coercion for adapters (revision notes / theory prompts)."""
@@ -99,13 +151,15 @@ def normalize_question(
         or raw.get("explanation_text")
         or ""
     )
+    prompt = _html_fragment(str(prompt_html))
 
     return {
         "id": qid,
         "exam_type": exam_type,
         "subject": subject,
-        "year": year,
-        "prompt_html": _html_fragment(str(prompt_html)),
+        "year": _year_from_raw(raw, year),
+        "prompt_html": prompt,
+        "diagram_url": _diagram_from_raw(raw, prompt),
         "options": options,
         "correct_option_id": correct_option_id,
         "explanation_html": _html_fragment(str(explanation)) if explanation else "",

@@ -34,7 +34,21 @@ export default function StaffAssignmentsScreen() {
 
   return (
     <Screen title="Assignments" subtitle="Practice, reading and your own questions">
-      <Button label="New assignment" icon="add" onPress={() => router.push('/staff/assignments/new')} />
+      <View style={styles.actions}>
+        <Button
+          label="Past questions"
+          icon="quiz"
+          variant="secondary"
+          onPress={() => router.push('/staff/past-questions')}
+          style={styles.action}
+        />
+        <Button
+          label="New assignment"
+          icon="add"
+          onPress={() => router.push('/staff/assignments/new')}
+          style={styles.action}
+        />
+      </View>
 
       {!allowed || (!items && !error) ? (
         <CenteredState loading />
@@ -44,8 +58,7 @@ export default function StaffAssignmentsScreen() {
         <Card>
           <ThemedText style={styles.title}>No assignments yet</ThemedText>
           <Muted>
-            Set WAEC/JAMB past-question practice, a reading from your school resources, or write your own
-            multiple-choice and theory questions.
+            Open Past questions to pick WAEC or JAMB questions, or write a reading and your own questions.
           </Muted>
         </Card>
       ) : (
@@ -79,6 +92,8 @@ export default function StaffAssignmentsScreen() {
 }
 
 const styles = StyleSheet.create({
+  actions: { flexDirection: 'row', gap: 10 },
+  action: { flex: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { fontSize: 16, fontWeight: '700' },
 });

@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 import { ThemedText } from '@/components/themed-text';
+import { useAuthStore } from '@/src/store/auth';
 import { useBooksStore } from '@/src/store/books';
 import { useDesktopChromeStore } from '@/src/store/desktopChrome';
 import { useNowReadingStore } from '@/src/store/nowReading';
@@ -38,6 +39,7 @@ export function DesktopSearchOverlay() {
   const closeSearch = useDesktopChromeStore((s) => s.closeSearch);
   const books = useBooksStore((s) => s.books);
   const recent = useNowReadingStore((s) => s.recent);
+  const role = useAuthStore((s) => s.user?.role);
   const [query, setQuery] = useState('');
 
   useEffect(() => {
@@ -62,13 +64,30 @@ export function DesktopSearchOverlay() {
         ? `/igcse/reader/${item.bookId}`
         : '/downloads') as Href,
     }));
-    const all = [...DESTINATIONS, ...recentHits, ...bookHits];
+    const staffHits: Hit[] =
+      role === 'staff'
+        ? [
+            {
+              id: 'd-past',
+              title: 'WAEC & JAMB past questions',
+              subtitle: 'Browse papers and assign questions',
+              href: '/staff/past-questions',
+            },
+            {
+              id: 'd-assignments',
+              title: 'Assignments',
+              subtitle: 'Work set for your classes',
+              href: '/staff/assignments',
+            },
+          ]
+        : [];
+    const all = [...staffHits, ...DESTINATIONS, ...recentHits, ...bookHits];
     if (!q) return all.slice(0, 12);
     return all.filter(
       (hit) =>
         hit.title.toLowerCase().includes(q) || hit.subtitle.toLowerCase().includes(q)
     ).slice(0, 16);
-  }, [books, query, recent]);
+  }, [books, query, recent, role]);
 
   const go = (href: Href) => {
     closeSearch();

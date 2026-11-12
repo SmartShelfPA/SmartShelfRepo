@@ -14,6 +14,9 @@ import {
   type StaffAssignmentDetail,
   type SubmissionStatus,
 } from '@/src/api/assignments';
+import { plainTextFromPracticeHtml } from '@/src/api/explainAnswer';
+import { AssignmentPrompt, paperSourceLabel } from '@/src/components/practice/AssignmentPrompt';
+import { RichPrompt } from '@/src/components/practice/RichPrompt';
 import { Button, Card, CenteredState, Muted, Pill, Screen, SectionLabel, useKitTheme } from '@/src/components/ui/kit';
 import { useRequireRole } from '@/src/hooks/useRequireRole';
 import { formatDue, formatShortDate } from '@/src/lib/dates';
@@ -175,14 +178,29 @@ export default function StaffAssignmentDetailScreen() {
               <Muted style={{ fontSize: 12 }}>
                 {i + 1}. {QUESTION_KIND_LABELS[q.kind]} · {q.max_marks} mark{q.max_marks === 1 ? '' : 's'}
               </Muted>
-              <ThemedText>{q.prompt}</ThemedText>
-              {q.options.map((o) => (
-                <Muted key={o.id} style={o.id === q.correct_option_id ? { color: '#00C832', fontWeight: '700' } : undefined}>
-                  {o.id}. {o.label}
-                  {o.id === q.correct_option_id ? '  ✓' : ''}
-                </Muted>
-              ))}
-              {q.marking_guide ? <Muted>Guide: {q.marking_guide}</Muted> : null}
+              <AssignmentPrompt
+                prompt={q.prompt}
+                diagramUrl={q.diagram_url}
+                source={paperSourceLabel(q.review_label)}
+                color={t.text}
+              />
+              {q.options.map((o) => {
+                const correct = o.id === q.correct_option_id;
+                return (
+                  <View key={o.id} style={styles.optionLine}>
+                    <ThemedText style={{ fontWeight: '700', color: correct ? '#00C832' : t.text }}>
+                      {o.id}
+                      {correct ? ' ✓' : ''}
+                    </ThemedText>
+                    <View style={{ flex: 1 }}>
+                      <RichPrompt value={o.label} color={correct ? '#00C832' : t.text} />
+                    </View>
+                  </View>
+                );
+              })}
+              {q.marking_guide ? (
+                <Muted>Guide: {plainTextFromPracticeHtml(q.marking_guide) || q.marking_guide}</Muted>
+              ) : null}
             </Card>
           ))}
         </>
@@ -205,6 +223,7 @@ const styles = StyleSheet.create({
   stat: { flex: 1, alignItems: 'center' },
   statValue: { fontSize: 20, fontWeight: '800' },
   subRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  optionLine: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   name: { fontSize: 15, fontWeight: '700' },
   score: { fontSize: 15, fontWeight: '800' },
 });

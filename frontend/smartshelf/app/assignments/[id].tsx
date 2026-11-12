@@ -12,10 +12,14 @@ import {
   submitStudentAssignment,
   type StudentAssignment,
 } from '@/src/api/assignments';
+import { plainTextFromPracticeHtml } from '@/src/api/explainAnswer';
 import { ALOC_WAEC_JAMB_PRACTICE_SUBJECTS, fetchPracticeYears } from '@/src/api/practice';
+import { AssignmentPrompt, paperSourceLabel } from '@/src/components/practice/AssignmentPrompt';
+import { RichPrompt } from '@/src/components/practice/RichPrompt';
 import { getProtectedPdf, type ProtectedPdfAsset } from '@/src/api/protectedPdfs';
 import { ProtectedResourceItem } from '@/src/components/igcse/ProtectedResourceItem';
 import { Button, Card, CenteredState, Field, Muted, Screen, SectionLabel, useKitTheme } from '@/src/components/ui/kit';
+import { prepareProtectedOpen } from '@/src/lib/protectedPdfAccess';
 import { useRequireRole } from '@/src/hooks/useRequireRole';
 import { formatDue, formatShortDate } from '@/src/lib/dates';
 
@@ -215,7 +219,7 @@ export default function StudentAssignmentScreen() {
         </>
       ) : null}
 
-      {data.kind === 'questions'
+      {(data.kind === 'questions' || data.kind === 'reading') && (data.questions?.length ?? 0) > 0
         ? (data.questions ?? []).map((q, i) => {
             const answer = answersById.get(q.id);
             const selected = draft[q.id]?.selected;
@@ -225,7 +229,13 @@ export default function StudentAssignmentScreen() {
                   Question {i + 1} · {QUESTION_KIND_LABELS[q.kind]} · {q.max_marks} mark{q.max_marks === 1 ? '' : 's'}
                   {graded && answer?.awarded_marks != null ? ` · you got ${answer.awarded_marks}` : ''}
                 </Muted>
-                <ThemedText style={styles.prompt}>{q.prompt}</ThemedText>
+                <AssignmentPrompt
+                  prompt={q.prompt}
+                  diagramUrl={q.diagram_url}
+                  source={paperSourceLabel(q.review_label)}
+                  color={t.text}
+                  textStyle={styles.prompt}
+                />
                 {q.kind === 'mcq' ? (
                   q.options.map((o) => {
                     const isSelected = selected === o.id;
@@ -245,9 +255,10 @@ export default function StudentAssignmentScreen() {
                           size={20}
                           color={isSelected ? t.tint : t.muted}
                         />
-                        <ThemedText style={{ flex: 1 }}>
-                          {o.id}. {o.label}
-                        </ThemedText>
+                        <ThemedText style={{ fontWeight: '700' }}>{o.id}</ThemedText>
+                        <View style={{ flex: 1 }}>
+                          <RichPrompt value={o.label} color={t.text} />
+                        </View>
                         {isCorrect ? <MaterialIcons name="check" size={18} color="#00C832" /> : null}
                       </TouchableOpacity>
                     );
@@ -261,7 +272,36 @@ export default function StudentAssignmentScreen() {
                     multiline
                   />
                 )}
-                {graded && q.marking_guide ? <Muted>Model answer: {q.marking_guide}</Muted> : null}
+                {graded && q.marking_guide ? (
+                  <Muted>Model answer: {plainTextFromPracticeHtml(q.marking_guide) || q.marking_guide}</Muted>
+                ) : null}
+                {graded && answer?.is_correct === false && data.resource?.id && (q.review_label || q.review_page) ? (
+                  <TouchableOpacity
+                    onPress={() => {
+                      const resourceId = data.resource?.id;
+                      if (!resourceId) return;
+                      void prepareProtectedOpen(resourceId).then((opened) => {
+                        if (!opened.ok) return;
+                        router.push({
+                          pathname: '/igcse/pdf-reader',
+                          params: {
+                            localUri: opened.localUri,
+                            bookId: resourceId,
+                            title: data.resource?.title ?? 'Textbook',
+                            page: String(q.review_page || 1),
+                          },
+                        });
+                      });
+                    }}>
+                    <ThemedText style={{ color: t.tint, fontWeight: '700' }}>
+                      Review this section{q.review_label ? `: ${q.review_label}` : ''}
+                      {q.review_page ? ` · page ${q.review_page}` : ''}
+                    </ThemedText>
+                  </TouchableOpacity>
+                ) : null}
+                {graded && answer?.is_correct === false && !data.resource?.id && q.review_label ? (
+                  <Muted>From {q.review_label}</Muted>
+                ) : null}
                 {answer?.feedback ? <Muted>Teacher: {answer.feedback}</Muted> : null}
               </Card>
             );
@@ -287,7 +327,7 @@ const styles = StyleSheet.create({
   feedback: { borderLeftWidth: 3, paddingLeft: 10, gap: 2 },
   option: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 10,
     borderWidth: 1,
     borderRadius: 10,

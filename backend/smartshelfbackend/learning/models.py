@@ -371,8 +371,12 @@ class QuestionCacheBatch(models.Model):
         ]
 
     @staticmethod
-    def make_batch_key(provider: str, exam_type: str, subject: str, year: int) -> str:
-        raw = f"{provider}|batch|{exam_type}|{subject}|{year}"
+    def make_batch_key(
+        provider: str, exam_type: str, subject: str, year: int, variant: str = ""
+    ) -> str:
+        raw = f"{provider}|batch|{exam_type}|{subject}|{year}|diagram"
+        if variant:
+            raw = f"{raw}|{variant}"
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 

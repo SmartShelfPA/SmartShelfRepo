@@ -23,6 +23,7 @@ import {
   PRACTICE_SESSION_QUESTION_TARGET,
 } from '@/src/api/practice';
 import { HtmlContent } from '@/src/components/practice/HtmlContent';
+import { QuestionDiagram } from '@/src/components/practice/QuestionDiagram';
 import { PracticeTimer } from '@/src/components/practice/PracticeTimer';
 import { QuestionPalette } from '@/src/components/practice/QuestionPalette';
 import { ScoreSummaryCard } from '@/src/components/practice/ScoreSummaryCard';
@@ -344,6 +345,7 @@ export default function PracticeSessionScreen() {
             showsVerticalScrollIndicator={false}>
             <View style={[styles.card, { backgroundColor: cardBgColor, borderColor }]}>
               <ThemedText style={[styles.cardLabel, { color: mutedTextColor }]}>Question</ThemedText>
+              {q ? <QuestionDiagram uri={q.diagramUrl} prompt={q.promptHtml} /> : null}
               {q ? <HtmlContent html={q.promptHtml} color={textColor} /> : null}
             </View>
 

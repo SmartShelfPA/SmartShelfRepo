@@ -82,6 +82,11 @@ class AssignmentQuestion(models.Model):
     order = models.PositiveSmallIntegerField(default=0)
     kind = models.CharField(max_length=10, choices=Kind.choices)
     prompt = models.TextField()
+    diagram_url = models.TextField(
+        blank=True,
+        default="",
+        help_text="Figure for this question: an image URL or a plain SVG diagram.",
+    )
     options = models.JSONField(
         default=list, blank=True, help_text="Multiple choice only: [{'id': 'A', 'label': '...'}]."
     )

@@ -119,9 +119,15 @@ function teacherSteps(isSchoolAdmin: boolean): TutorialStep[] {
       where: 'You are on this screen now',
     },
     {
+      icon: 'quiz',
+      title: 'WAEC and JAMB past questions',
+      body: 'The green card at the top opens past papers. Tick questions from any subject or year and mix them into one assignment. Diagrams are shown to students.',
+      where: 'WAEC & JAMB past questions, at the top',
+    },
+    {
       icon: 'assignment',
       title: 'Set work',
-      body: 'New assignment starts a task. Assignments shows who has started and who has finished.',
+      body: 'New assignment starts a task. Assignments shows who has started and who has finished. On a computer, Past questions is also in the side menu.',
       where: 'Tiles at the top',
     },
     {

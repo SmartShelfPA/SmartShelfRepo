@@ -161,8 +161,25 @@ export default function TeacherView() {
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}>
+        <TouchableOpacity
+          style={[styles.pastBanner, { borderColor: tintColor, backgroundColor: cardBgColor }]}
+          onPress={() => router.push('/staff/past-questions')}
+          activeOpacity={0.85}>
+          <View style={[styles.pastIcon, { backgroundColor: 'rgba(0,255,65,0.15)' }]}>
+            <MaterialIcons name="quiz" size={26} color={tintColor} />
+          </View>
+          <View style={styles.pastCopy}>
+            <ThemedText style={styles.pastTitle}>WAEC & JAMB past questions</ThemedText>
+            <ThemedText style={[styles.pastSub, { color: mutedTextColor }]}>
+              Browse papers, tick questions, and assign them to a class.
+            </ThemedText>
+          </View>
+          <MaterialIcons name="chevron-right" size={24} color={tintColor} />
+        </TouchableOpacity>
+
         <View style={styles.actionGrid}>
           {[
+            { label: 'Past questions', icon: 'quiz' as const, href: '/staff/past-questions' as const },
             { label: 'New assignment', icon: 'add-task' as const, href: '/staff/assignments/new' as const },
             { label: 'Assignments', icon: 'assignment' as const, href: '/staff/assignments' as const },
             {
@@ -245,7 +262,7 @@ export default function TeacherView() {
             onPress={() => router.push('/staff/assignments/new')}>
             <ThemedText style={styles.cardTitle}>No assignments yet</ThemedText>
             <ThemedText style={[styles.cardMeta, { color: mutedTextColor }]}>
-              Set past-question practice, reading, or your own questions (multiple choice or written).
+              Open WAEC & JAMB past questions above, or set reading and your own questions.
             </ThemedText>
           </TouchableOpacity>
         ) : (
@@ -477,7 +494,26 @@ const styles = StyleSheet.create({
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12 },
   scroll: { paddingHorizontal: 16, maxWidth: 640, alignSelf: 'center', width: '100%' },
   sectionTitle: { fontSize: 12, fontWeight: '600', letterSpacing: 1 },
-  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 },
+  pastBanner: {
+    marginTop: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  pastIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pastCopy: { flex: 1, gap: 2 },
+  pastTitle: { fontSize: 16, fontWeight: '800' },
+  pastSub: { fontSize: 13, lineHeight: 18 },
+  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   actionTile: {
     flexGrow: 1,
     flexBasis: '45%',
