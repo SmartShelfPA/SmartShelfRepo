@@ -1,5 +1,6 @@
 import type { NormalizedAnswerOption, NormalizedQuestion } from '@/src/types/practice';
 import type { PracticeExamType } from '@/src/types/exam';
+import { cleanDiagramUrl, diagramFromHtml } from '@/src/components/practice/QuestionDiagram';
 
 function pickString(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim().length > 0 ? v : undefined;
@@ -78,6 +79,15 @@ export function djangoQuestionRecordToNormalized(
     subject,
     year,
     promptHtml,
+    diagramUrl:
+      cleanDiagramUrl(
+        pickString(raw.diagram_url) ??
+          pickString(raw.diagramUrl) ??
+          pickString(raw.image) ??
+          pickString(raw.image_url)
+      ) ||
+      diagramFromHtml(promptHtml) ||
+      undefined,
     options,
     correctOptionId,
     explanationHtml,

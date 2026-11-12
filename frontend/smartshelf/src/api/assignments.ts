@@ -30,6 +30,7 @@ export type AssignmentQuestion = {
   order: number;
   kind: QuestionKind;
   prompt: string;
+  diagram_url?: string;
   options: QuestionOption[];
   max_marks: number;
   correct_option_id?: string;
@@ -114,6 +115,7 @@ export type RosterClass = {
 export type QuestionDraft = {
   kind: QuestionKind;
   prompt: string;
+  diagram_url?: string;
   options?: QuestionOption[];
   correct_option_id?: string;
   marking_guide?: string;

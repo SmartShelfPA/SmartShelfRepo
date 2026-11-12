@@ -1,5 +1,6 @@
 import type { PracticeExamType } from '@/src/types/exam';
 import type { NormalizedAnswerOption, NormalizedQuestion } from '@/src/types/practice';
+import { cleanDiagramUrl, diagramFromHtml } from '@/src/components/practice/QuestionDiagram';
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
@@ -176,6 +177,16 @@ export function normalizeQuestionPayload(
     subject,
     year,
     promptHtml,
+    diagramUrl:
+      cleanDiagramUrl(
+        pickString(obj.diagram_url) ??
+          pickString(obj.diagramUrl) ??
+          pickString(obj.image) ??
+          pickString(obj.image_url) ??
+          pickString(obj.imageUrl)
+      ) ||
+      diagramFromHtml(promptHtml) ||
+      undefined,
     options,
     correctOptionId,
     explanationHtml,

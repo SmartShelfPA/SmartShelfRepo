@@ -17,6 +17,8 @@ export type NormalizedQuestion = {
   year: number;
   /** Primary prompt — HTML fragment */
   promptHtml: string;
+  /** Official figure: image URL or a plain SVG diagram. */
+  diagramUrl?: string;
   options: NormalizedAnswerOption[];
   correctOptionId: string;
   explanationHtml?: string;

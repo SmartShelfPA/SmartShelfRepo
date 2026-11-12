@@ -1,11 +1,36 @@
 import { useMemo } from 'react';
 import { useWindowDimensions } from 'react-native';
-import RenderHtml from 'react-native-render-html';
+import { Image } from 'expo-image';
+import RenderHtml, { HTMLContentModel, HTMLElementModel } from 'react-native-render-html';
 
 type Props = {
   html: string;
   color: string;
 };
+
+const customHTMLElementModels = {
+  img: HTMLElementModel.fromCustomModel({
+    tagName: 'img',
+    contentModel: HTMLContentModel.block,
+  }),
+};
+
+function DiagramImage({
+  tnode,
+}: {
+  tnode: { attributes: { src?: string; alt?: string } };
+}) {
+  const src = tnode.attributes?.src?.trim();
+  if (!src) return null;
+  return (
+    <Image
+      source={{ uri: src }}
+      style={{ width: '100%', height: 200, marginVertical: 8, borderRadius: 10, backgroundColor: '#ffffff' }}
+      contentFit="contain"
+      accessibilityLabel={tnode.attributes.alt || 'Diagram'}
+    />
+  );
+}
 
 export function HtmlContent({ html, color }: Props) {
   const { width } = useWindowDimensions();
@@ -26,6 +51,8 @@ export function HtmlContent({ html, color }: Props) {
       contentWidth={Math.max(280, width - 32)}
       source={{ html }}
       tagsStyles={tagsStyles}
+      customHTMLElementModels={customHTMLElementModels}
+      renderers={{ img: DiagramImage }}
     />
   );
 }

@@ -16,6 +16,10 @@ export const PRACTICE_SESSION_QUESTION_TARGET = 10;
 export type FetchPracticeQuestionsOptions = {
   /** Fired whenever a new unique question is counted (starts at `0/target`). */
   onProgress?: (loadedUniqueCount: number, targetCount: number) => void;
+  /** How many questions to keep. Practice sessions use 10; the teacher browser asks for a full paper. */
+  limit?: number;
+  /** When set, an empty year stays empty instead of being filled from another paper. */
+  strictYear?: boolean;
 };
 
 type ALOCQuestionType = 'utme' | 'wassce' | 'post-utme';
@@ -49,7 +53,7 @@ export const ALOC_WAEC_JAMB_PRACTICE_SUBJECTS: PracticeSubjectOption[] = [
   { label: 'Geography', alocSlug: 'geography' },
   { label: 'Economics', alocSlug: 'economics' },
   { label: 'Islamic Religious Knowledge', alocSlug: 'irk' },
-  { label: 'Civic Education', alocSlug: 'civic' },
+  { label: 'Civic Education', alocSlug: 'civiledu' },
   { label: 'Insurance', alocSlug: 'insurance' },
   { label: 'Current Affairs', alocSlug: 'currentaffairs' },
   { label: 'History', alocSlug: 'history' },
@@ -228,10 +232,36 @@ export async function fetchPracticeSubjects(
   return ALOC_WAEC_JAMB_PRACTICE_SUBJECTS;
 }
 
-export async function fetchPracticeYears(examType: PracticeExamType): Promise<number[]> {
-  void examType;
-  /** Years with seeded/local ALOC data; falls back to recent years when using hosted API. */
-  return [2008, 2006, 2013, 2012, 2011, 2010, 2009, 2007, 2005, 2004];
+/** Every year the past-question bank may contain, newest first. */
+export function cataloguePracticeYears(): number[] {
+  const latest = new Date().getFullYear();
+  const years: number[] = [];
+  for (let year = latest; year >= 2000; year -= 1) years.push(year);
+  return years;
+}
+
+export async function fetchPracticeYears(
+  examType: PracticeExamType,
+  subject?: string
+): Promise<number[]> {
+  const fallback = cataloguePracticeYears();
+  if (examType === 'IGCSE') return fallback;
+  const examKind = examType === 'JAMB' ? 'jamb' : 'waec';
+  const params = new URLSearchParams();
+  if (subject?.trim()) params.set('subject', subject.trim().toLowerCase());
+  const query = params.toString();
+  try {
+    const response = await apiRequest(`/v1/practice/${examKind}/years/${query ? `?${query}` : ''}`);
+    const raw = await response.json().catch(() => null);
+    if (!response.ok || !Array.isArray(raw)) return fallback;
+    const years = raw
+      .map((item) => Number(item))
+      .filter((year) => Number.isFinite(year) && year >= 1980 && year <= 2100);
+    const unique = [...new Set(years)].sort((a, b) => b - a);
+    return unique.length > 0 ? unique : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 /** Render cold start + server-side ALOC aggregation can exceed the default 10s API timeout. */
@@ -256,16 +286,19 @@ async function fetchPracticeQuestionsFromBackend(
   options?: FetchPracticeQuestionsOptions
 ): Promise<NormalizedQuestion[]> {
   const onProgress = options?.onProgress;
+  const limit = options?.limit ?? PRACTICE_SESSION_QUESTION_TARGET;
   const examKind = query.examType === 'WAEC' ? 'waec' : 'jamb';
-  onProgress?.(0, PRACTICE_SESSION_QUESTION_TARGET);
+  onProgress?.(0, limit);
+  const params = new URLSearchParams({
+    subject: query.subject.toLowerCase(),
+    year: String(query.year),
+  });
+  if (options?.strictYear) params.set('strict', '1');
 
   let response: Response;
   try {
     response = await apiRequest(
-      `/v1/practice/${examKind}/questions/?${new URLSearchParams({
-        subject: query.subject.toLowerCase(),
-        year: String(query.year),
-      }).toString()}`,
+      `/v1/practice/${examKind}/questions/?${params.toString()}`,
       { timeoutMs: PRACTICE_BACKEND_TIMEOUT_MS }
     );
   } catch (error) {
@@ -288,7 +321,7 @@ async function fetchPracticeQuestionsFromBackend(
       )
     )
     .filter((q): q is NormalizedQuestion => q !== null)
-    .slice(0, PRACTICE_SESSION_QUESTION_TARGET)
+    .slice(0, limit)
     .map((q, orderIndex) => ({ ...q, orderIndex }));
 
   if (mapped.length === 0) {
@@ -298,8 +331,22 @@ async function fetchPracticeQuestionsFromBackend(
     );
   }
 
-  onProgress?.(mapped.length, PRACTICE_SESSION_QUESTION_TARGET);
+  onProgress?.(mapped.length, limit);
   return mapped;
+}
+
+/** Full paper for teachers browsing WAEC/JAMB questions, not the 10-question practice session. */
+export async function fetchPastPaperQuestions(query: PracticeQuery): Promise<NormalizedQuestion[]> {
+  try {
+    return await fetchPracticeQuestionsFromBackend(query, { limit: 40, strictYear: true });
+  } catch (backendErr) {
+    if (!ALOC_ACCESS_TOKEN?.trim() && __DEV__) {
+      return mockQuestions(query);
+    }
+    throw backendErr instanceof Error
+      ? backendErr
+      : new Error('Could not load past questions from SmartShelf.');
+  }
 }
 
 export async function fetchPracticeQuestions(
