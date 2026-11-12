@@ -12,6 +12,12 @@ export type ProtectedPdfAsset = {
   rights_status: string;
   rights_version: number;
   is_downloadable: boolean;
+  author?: string;
+  edition?: string;
+  isbn?: string;
+  publisher_name?: string;
+  curriculum?: string;
+  offline_allowed?: boolean;
   created_at: string;
   updated_at: string;
 };

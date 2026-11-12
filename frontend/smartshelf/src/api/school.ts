@@ -33,6 +33,7 @@ export type SchoolResource = ProtectedPdfAsset & {
   audience_classes: string[];
   uploaded_by_id: string | null;
   uploaded_by_name: string;
+  reading_page?: number | null;
 };
 
 export type PickedPdf = {
@@ -111,11 +112,23 @@ export async function uploadSchoolResource(input: {
   subject?: string;
   description?: string;
   audienceClasses: string[];
+  author?: string;
+  edition?: string;
+  isbn?: string;
+  publisherName?: string;
+  curriculum?: string;
+  offlineAllowed?: boolean;
 }): Promise<SchoolResource> {
   const form = new FormData();
   form.append('title', input.title);
   form.append('subject', input.subject ?? '');
   form.append('description', input.description ?? '');
+  form.append('author', input.author ?? '');
+  form.append('edition', input.edition ?? '');
+  form.append('isbn', input.isbn ?? '');
+  form.append('publisher_name', input.publisherName ?? '');
+  form.append('curriculum', input.curriculum ?? '');
+  form.append('offline_allowed', input.offlineAllowed === false ? 'false' : 'true');
   form.append('audience_classes', JSON.stringify(input.audienceClasses));
   form.append('rights_confirmed', 'true');
   if (Platform.OS === 'web' && input.file.file) {

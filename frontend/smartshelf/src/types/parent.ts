@@ -58,6 +58,17 @@ export interface ParentChild {
   practice?: ParentChildPractice;
   assignments?: ParentChildAssignment[];
   teacherNotes?: ParentChildNote[];
+  weekly?: {
+    assignmentsCompleted: number;
+    overdueAssignments: number;
+    practiceSessions: number;
+    practiceAvgPercent: number | null;
+    booksOpened: number;
+    readingNote: string;
+    topicsMastered: number;
+    topicsNeedingSupport: { topic: string; subject: string; scorePercent: number }[];
+    supportSuggestions: string[];
+  };
 }
 
 export type ShelfItemStatus = 'ok' | 'low' | 'out';

@@ -128,3 +128,12 @@ export function isOfflineExpired(record: ProtectedDownloadRecord, now = Date.now
   const ts = Date.parse(record.offlineExpiresAt);
   return Number.isFinite(ts) ? ts < now : true;
 }
+
+/** Web keeps a partial blob so a dropped download can resume. Native retries the full file. */
+export async function readPartialPdf(_assetId: string): Promise<Blob | null> {
+  return null;
+}
+
+export async function savePartialPdf(_assetId: string, _blob: Blob): Promise<void> {}
+
+export async function clearPartialPdf(_assetId: string): Promise<void> {}

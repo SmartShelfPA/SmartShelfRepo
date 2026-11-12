@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 import { ThemedText } from '@/components/themed-text';
@@ -14,6 +14,7 @@ import {
   type SchoolMember,
   type SchoolOverview,
 } from '@/src/api/school';
+import { importStudents, type ImportedStudent } from '@/src/api/study';
 import {
   Button,
   Card,
@@ -68,6 +69,9 @@ export default function SchoolAdminScreen() {
   const [studentClass, setStudentClass] = useState('');
   const [makeAdmin, setMakeAdmin] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [csv, setCsv] = useState('full_name,email,class\n');
+  const [importing, setImporting] = useState(false);
+  const [imported, setImported] = useState<ImportedStudent[]>([]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -212,11 +216,41 @@ export default function SchoolAdminScreen() {
             Temporary password: {credential.password}
           </ThemedText>
           <Muted style={{ fontSize: 12 }}>
-            Share these privately. This password is shown only once; they can change it from Forgot password.
+            Share these privately. This password is shown only once; they can change it from their profile.
           </Muted>
           <Button label="Done" variant="secondary" onPress={() => setCredential(null)} />
         </Card>
       ) : null}
+
+      <SectionLabel>IMPORT STUDENTS</SectionLabel>
+      <Card>
+        <Muted>One student per line: full name, email, class. Up to 200 rows. Passwords are shown once.</Muted>
+        <Field value={csv} onChangeText={setCsv} multiline placeholder="Ada Okonkwo, ada@school.ng, SS2A" />
+        <Button
+          label="Import"
+          icon="upload-file"
+          loading={importing}
+          onPress={() => {
+            setImporting(true);
+            void importStudents(csv)
+              .then(async (res) => {
+                setImported(res.created);
+                if (res.errors.length) {
+                  notify('Some rows were skipped', res.errors.map((e) => `Row ${e.row}: ${e.error}`).join('\n'));
+                }
+                setMembers(await fetchMembers());
+              })
+              .catch((e) => notify('Could not import', e instanceof Error ? e.message : 'Try again.'))
+              .finally(() => setImporting(false));
+          }}
+        />
+        {imported.map((row) => (
+          <ThemedText key={row.username} selectable>
+            {row.full_name} · {row.username} · {row.temporary_password}
+          </ThemedText>
+        ))}
+        <Button label="Term licences" variant="secondary" icon="event" onPress={() => router.push('/school/licences' as Href)} />
+      </Card>
 
       <SectionLabel>SCHOOL CODE</SectionLabel>
       <Card>

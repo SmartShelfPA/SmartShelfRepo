@@ -11,7 +11,7 @@ import { useProtectedPdfDownload } from '@/src/hooks/useProtectedPdfDownload';
 export function ProtectedResourceItem({ asset }: { asset: ProtectedPdfAsset }) {
   const router = useRouter();
   const t = useKitTheme();
-  const { status, error, download, remove, prepareOpen } = useProtectedPdfDownload(asset);
+  const { status, error, progress, download, remove, prepareOpen } = useProtectedPdfDownload(asset);
 
   const open = useCallback(async () => {
     if (status !== 'done' && status !== 'expired') {
@@ -36,6 +36,7 @@ export function ProtectedResourceItem({ asset }: { asset: ProtectedPdfAsset }) {
       asset={asset}
       status={status}
       error={error}
+      progress={progress}
       onPrimary={open}
       onDownload={() => void download()}
       onRemove={() => void remove()}

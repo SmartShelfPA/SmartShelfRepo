@@ -11,7 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -171,15 +171,19 @@ export default function TeacherView() {
               href: '/messages' as const,
             },
             { label: 'School resources', icon: 'folder-shared' as const, href: '/school/resources' as const },
+            { label: 'Chapter questions', icon: 'quiz' as const, href: '/staff/topics' as const },
             ...(user?.is_school_admin
-              ? [{ label: 'School admin', icon: 'admin-panel-settings' as const, href: '/school/admin' as const }]
+              ? [
+                  { label: 'School admin', icon: 'admin-panel-settings' as const, href: '/school/admin' as const },
+                  { label: 'Term licences', icon: 'event' as const, href: '/school/licences' as const },
+                ]
               : []),
             { label: 'Help & feedback', icon: 'support-agent' as const, href: '/feedback' as const },
           ].map((action) => (
             <TouchableOpacity
               key={action.label}
               style={[styles.actionTile, { borderColor: tintColor, backgroundColor: cardBgColor }]}
-              onPress={() => router.push(action.href)}
+              onPress={() => router.push(action.href as Href)}
               activeOpacity={0.8}>
               <MaterialIcons name={action.icon} size={22} color={tintColor} />
               <ThemedText style={styles.actionLabel}>{action.label}</ThemedText>

@@ -114,6 +114,27 @@ export async function removeDownload(assetId: string): Promise<void> {
   delete map[assetId];
   await writeIndex(map);
   await idbDelete(STORE_BLOBS, assetId);
+  await idbDelete(STORE_BLOBS, partialKey(assetId));
+}
+
+function partialKey(assetId: string): string {
+  return `partial:${assetId}`;
+}
+
+export async function readPartialPdf(assetId: string): Promise<Blob | null> {
+  if (isElectronDesktop()) return null;
+  const blob = await idbGet<Blob>(STORE_BLOBS, partialKey(assetId));
+  return blob && blob.size > 0 ? blob : null;
+}
+
+export async function savePartialPdf(assetId: string, blob: Blob): Promise<void> {
+  if (isElectronDesktop() || blob.size <= 0) return;
+  await idbSet(STORE_BLOBS, partialKey(assetId), blob);
+}
+
+export async function clearPartialPdf(assetId: string): Promise<void> {
+  if (isElectronDesktop()) return;
+  await idbDelete(STORE_BLOBS, partialKey(assetId));
 }
 
 export function isOfflineExpired(record: ProtectedDownloadRecord, now = Date.now()): boolean {

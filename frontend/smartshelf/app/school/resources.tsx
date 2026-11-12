@@ -50,6 +50,12 @@ export default function SchoolResourcesScreen() {
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
+  const [author, setAuthor] = useState('');
+  const [edition, setEdition] = useState('');
+  const [isbn, setIsbn] = useState('');
+  const [publisherName, setPublisherName] = useState('');
+  const [curriculum, setCurriculum] = useState('');
+  const [offlineAllowed, setOfflineAllowed] = useState(true);
   const [audience, setAudience] = useState<string[]>([]);
   const [rightsOk, setRightsOk] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -99,6 +105,12 @@ export default function SchoolResourcesScreen() {
     setTitle('');
     setSubject('');
     setDescription('');
+    setAuthor('');
+    setEdition('');
+    setIsbn('');
+    setPublisherName('');
+    setCurriculum('');
+    setOfflineAllowed(true);
     setAudience([]);
     setRightsOk(false);
     setShowForm(false);
@@ -117,6 +129,12 @@ export default function SchoolResourcesScreen() {
         title: title.trim(),
         subject: subject.trim(),
         description: description.trim(),
+        author: author.trim(),
+        edition: edition.trim(),
+        isbn: isbn.trim(),
+        publisherName: publisherName.trim(),
+        curriculum: curriculum.trim(),
+        offlineAllowed,
         audienceClasses: audience,
       });
       setItems((prev) => [created, ...(prev ?? [])]);
@@ -149,8 +167,8 @@ export default function SchoolResourcesScreen() {
 
   return (
     <Screen
-      title="School resources"
-      subtitle={isStaff ? 'PDFs only your school can see' : 'Shared by your teachers'}>
+      title={isStaff ? 'School resources' : 'My school books'}
+      subtitle={isStaff ? 'The editions your school has licensed' : 'Titles chosen for your class'}>
       {isStaff ? (
         showForm ? (
           <Card>
@@ -162,7 +180,17 @@ export default function SchoolResourcesScreen() {
               onPress={pickFile}
             />
             <Field label="Title" value={title} onChangeText={setTitle} placeholder="e.g. SS2 Chemistry notes, term 1" />
-            <Field label="Subject (optional)" value={subject} onChangeText={setSubject} placeholder="e.g. Chemistry" />
+            <Field label="Subject" value={subject} onChangeText={setSubject} placeholder="e.g. Biology" />
+            <Field label="Author" value={author} onChangeText={setAuthor} placeholder="Author name" />
+            <Field label="Publisher" value={publisherName} onChangeText={setPublisherName} placeholder="e.g. Learn Africa" />
+            <Field label="Edition" value={edition} onChangeText={setEdition} placeholder="e.g. 3rd" />
+            <Field label="ISBN" value={isbn} onChangeText={setIsbn} placeholder="978..." />
+            <Field
+              label="Curriculum"
+              value={curriculum}
+              onChangeText={setCurriculum}
+              placeholder="e.g. NERDC SS2 Biology"
+            />
             <Field
               label="Description (optional)"
               value={description}
@@ -186,6 +214,12 @@ export default function SchoolResourcesScreen() {
             <Muted style={{ fontSize: 12 }}>
               Teachers always see every school resource. Students only see resources for their class.
             </Muted>
+            <View style={styles.switchRow}>
+              <Switch value={offlineAllowed} onValueChange={setOfflineAllowed} trackColor={{ true: t.accent }} />
+              <ThemedText style={{ flex: 1, fontSize: 13 }}>
+                Students may keep an offline copy. Leave this off until the publisher has confirmed download rights.
+              </ThemedText>
+            </View>
             <View style={styles.switchRow}>
               <Switch value={rightsOk} onValueChange={setRightsOk} trackColor={{ true: t.accent }} />
               <ThemedText style={{ flex: 1, fontSize: 13 }}>
@@ -222,8 +256,16 @@ export default function SchoolResourcesScreen() {
               <ProtectedResourceItem asset={r} />
               <View style={styles.meta}>
                 <Muted style={{ fontSize: 12, flex: 1 }}>
-                  {r.audience_classes.length ? r.audience_classes.join(', ') : 'Whole school'}
-                  {r.uploaded_by_name ? ` · by ${r.uploaded_by_name}` : ''}
+                  {[
+                    r.publisher_name,
+                    r.edition ? `${r.edition} edition` : '',
+                    r.curriculum,
+                    r.isbn ? `ISBN ${r.isbn}` : '',
+                    r.audience_classes.length ? r.audience_classes.join(', ') : 'Whole school',
+                    r.reading_page ? `Resume p.${r.reading_page}` : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </Muted>
                 {isStaff && (user?.is_school_admin || r.uploaded_by_id === user?.id) ? (
                   <TouchableOpacity onPress={() => void remove(r)} accessibilityLabel={`Delete ${r.title}`}>

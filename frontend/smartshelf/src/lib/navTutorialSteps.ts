@@ -60,7 +60,7 @@ function studentSteps(desktop: boolean, hasSchool: boolean): TutorialStep[] {
     steps.push({
       icon: 'assignment',
       title: 'School work',
-      body: 'Your school section on Home lists assignments that are still open, plus notes and PDFs from your teachers.',
+      body: 'Your school section on Home lists assignments, this week’s plan, progress, and the books chosen for your class.',
       where: 'Home → your school name',
     });
   }
