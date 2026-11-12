@@ -150,5 +150,5 @@ export function useProtectedPdfDownload(asset: Pick<ProtectedPdfAsset, 'id' | 't
     return result;
   }, [asset.id]);
 
-  return { status, error, download, remove, prepareOpen };
+  return { status, error, progress: null as number | null, download, remove, prepareOpen };
 }

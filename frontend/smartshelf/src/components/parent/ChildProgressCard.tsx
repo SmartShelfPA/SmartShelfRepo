@@ -66,6 +66,31 @@ export function ChildProgressCard({
         <Stat label="Sessions (7d)" value={String(practice?.sessionsThisWeek ?? 0)} bg={subtle} />
       </View>
 
+      {child.weekly ? (
+        <View style={[styles.item, { borderColor: border, gap: 4 }]}>
+          <ThemedText style={styles.itemTitle}>This week</ThemedText>
+          <ThemedText style={{ color: muted, fontSize: 13 }}>
+            {child.weekly.assignmentsCompleted} assignments handed in · {child.weekly.practiceSessions} practice sessions
+            {child.weekly.practiceAvgPercent != null ? ` · ${Math.round(child.weekly.practiceAvgPercent)}%` : ''} ·{' '}
+            {child.weekly.topicsMastered} topics practised successfully
+          </ThemedText>
+          <ThemedText style={{ color: muted, fontSize: 13 }}>
+            Books opened: {child.weekly.booksOpened}. {child.weekly.readingNote}
+          </ThemedText>
+          {child.weekly.topicsNeedingSupport.map((topic) => (
+            <ThemedText key={topic.topic} style={{ fontSize: 13 }}>
+              Needs support: {topic.topic}
+              {topic.subject ? ` (${topic.subject})` : ''} · {Math.round(topic.scorePercent)}%
+            </ThemedText>
+          ))}
+          {child.weekly.supportSuggestions.map((line) => (
+            <ThemedText key={line} style={{ fontSize: 13 }}>
+              {line}
+            </ThemedText>
+          ))}
+        </View>
+      ) : null}
+
       <Section title="ASSIGNMENTS" muted={muted}>
         {assignments.length === 0 ? (
           <ThemedText style={{ color: muted }}>No assignments from teachers yet.</ThemedText>

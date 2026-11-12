@@ -8,6 +8,7 @@ type Props = {
   asset: ProtectedPdfAsset;
   status: ProtectedDownloadStatus;
   error?: string | null;
+  progress?: number | null;
   onPrimary: () => void;
   onDownload: () => void;
   onRemove: () => void;
@@ -18,6 +19,22 @@ type Props = {
   cardBg: string;
   tagBg: string;
 };
+
+function CatalogueLine({ asset, color }: { asset: ProtectedPdfAsset; color: string }) {
+  const parts = [
+    asset.author,
+    asset.publisher_name,
+    asset.edition ? `${asset.edition} edition` : '',
+    asset.curriculum,
+    asset.isbn ? `ISBN ${asset.isbn}` : '',
+  ].filter(Boolean);
+  if (parts.length === 0) return null;
+  return (
+    <ThemedText style={[styles.subject, { color }]} numberOfLines={2}>
+      {parts.join(' · ')}
+    </ThemedText>
+  );
+}
 
 function formatSize(bytes?: number): string {
   if (!bytes || bytes <= 0) return '';
@@ -30,6 +47,7 @@ export function ProtectedPdfCard({
   asset,
   status,
   error,
+  progress,
   onPrimary,
   onDownload,
   onRemove,
@@ -48,11 +66,11 @@ export function ProtectedPdfCard({
       case 'authorizing':
         return 'Authorizing…';
       case 'downloading':
-        return 'Downloading…';
+        return progress != null ? `Downloading ${Math.round(progress * 100)}%` : 'Downloading…';
       case 'done':
-        return 'Available offline';
+        return asset.offline_allowed === false ? 'Open online' : 'Available offline';
       case 'expired':
-        return 'Tap to refresh offline access';
+        return asset.offline_allowed === false ? 'Online only — tap to open' : 'Tap to refresh offline access';
       case 'revoked':
         return error || 'Access revoked';
       case 'failed':
@@ -96,6 +114,7 @@ export function ProtectedPdfCard({
               {asset.subject}
             </ThemedText>
           ) : null}
+          <CatalogueLine asset={asset} color={mutedColor} />
           <View style={styles.statusRow}>
             {isBusy ? <ActivityIndicator size="small" color={tintColor} /> : null}
             <ThemedText style={[styles.status, { color: statusColor }]} numberOfLines={1}>

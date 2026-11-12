@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter, type Href } from 'expo-router';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 import { ThemedText } from '@/components/themed-text';
@@ -72,14 +72,44 @@ export function SchoolWorkSection({ schoolName }: { schoolName?: string }) {
 
       <TouchableOpacity
         activeOpacity={0.8}
+        onPress={() => router.push('/study' as Href)}
+        style={[styles.card, { borderColor: '#00FF41', backgroundColor: t.card }]}>
+        <View style={styles.cardHeader}>
+          <MaterialIcons name="event-note" size={22} color={t.tint} />
+          <ThemedText style={styles.cardTitle}>This week</ThemedText>
+          <MaterialIcons name="chevron-right" size={20} color={t.muted} />
+        </View>
+        <ThemedText style={[styles.line, { color: t.muted }]}>
+          Assigned reading, unfinished books, and practice in one list
+        </ThemedText>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        activeOpacity={0.8}
+        onPress={() => router.push('/study/progress' as Href)}
+        style={[styles.card, { borderColor: '#00FF41', backgroundColor: t.card }]}>
+        <View style={styles.cardHeader}>
+          <MaterialIcons name="insights" size={22} color={t.tint} />
+          <ThemedText style={styles.cardTitle}>Progress</ThemedText>
+          <MaterialIcons name="chevron-right" size={20} color={t.muted} />
+        </View>
+        <ThemedText style={[styles.line, { color: t.muted }]}>
+          Reading activity is separate from topic quiz scores
+        </ThemedText>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        activeOpacity={0.8}
         onPress={() => router.push('/school/resources')}
         style={[styles.card, { borderColor: '#00FF41', backgroundColor: t.card }]}>
         <View style={styles.cardHeader}>
           <MaterialIcons name="folder-shared" size={22} color={t.tint} />
-          <ThemedText style={styles.cardTitle}>School resources</ThemedText>
+          <ThemedText style={styles.cardTitle}>My school books</ThemedText>
           <MaterialIcons name="chevron-right" size={20} color={t.muted} />
         </View>
-        <ThemedText style={[styles.line, { color: t.muted }]}>Notes and PDFs shared by your teachers</ThemedText>
+        <ThemedText style={[styles.line, { color: t.muted }]}>
+          Titles and editions chosen for your class
+        </ThemedText>
       </TouchableOpacity>
     </View>
   );

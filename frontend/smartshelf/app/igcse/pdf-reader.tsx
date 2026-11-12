@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { buildPdfViewerSrc } from '@/src/lib/pdfViewerUrl';
-import { useBookLastPage } from '@/src/hooks/useBookLastPage';
+import { useSyncedReadingPage } from '@/src/hooks/useSyncedReadingPage';
 import { useNowReadingStore } from '@/src/store/nowReading';
 import { useAuthStore } from '@/src/store/auth';
 import { usePdfAnnotationBridge } from '@/src/hooks/usePdfAnnotationBridge';
@@ -25,14 +25,15 @@ export default function IgcsePdfReaderScreen() {
   const iconColor = useThemeColor({}, 'text');
   const bgColor = useThemeColor({}, 'background');
 
-  const { url, localUri, bookId, title } = useLocalSearchParams<{
+  const { url, localUri, bookId, title, page } = useLocalSearchParams<{
     url: string;
     localUri?: string;
     bookId: string;
     title?: string;
+    page?: string;
   }>();
 
-  const { getLastPage, saveLastPage } = useBookLastPage(bookId ?? '');
+  const { getLastPage, saveLastPage, syncState } = useSyncedReadingPage(bookId ?? '');
   const [initialPage, setInitialPage] = useState(1);
   const [ready, setReady] = useState(false);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
@@ -66,11 +67,18 @@ export default function IgcsePdfReaderScreen() {
       setReady(true);
       return;
     }
+    const requested = Number(page);
+    if (Number.isFinite(requested) && requested >= 1) {
+      setInitialPage(requested);
+      setReady(true);
+      void saveLastPage(requested);
+      return;
+    }
     void getLastPage().then((p) => {
       setInitialPage(p);
       setReady(true);
     });
-  }, [bookId, getLastPage]);
+  }, [bookId, getLastPage, page, saveLastPage]);
 
   const viewerSrc = useMemo(
     () =>
@@ -102,6 +110,9 @@ export default function IgcsePdfReaderScreen() {
         </TouchableOpacity>
         <Text style={[styles.titleText, { color: iconColor }]} numberOfLines={1}>
           {title ?? 'Textbook'}
+        </Text>
+        <Text style={{ color: iconColor, fontSize: 12, opacity: 0.7 }}>
+          {syncState === 'synced' ? 'Synced' : syncState === 'local' ? 'Saved on this device' : ''}
         </Text>
       </View>
 

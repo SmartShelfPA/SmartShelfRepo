@@ -6,10 +6,13 @@ import {
   type ProtectedPdfAsset,
 } from '@/src/api/protectedPdfs';
 import {
+  clearPartialPdf,
   getDownload,
   isOfflineExpired,
   pdfBlobExists,
+  readPartialPdf,
   removeDownload,
+  savePartialPdf,
   storePdfBlob,
   upsertDownload,
   type ProtectedDownloadRecord,
@@ -32,6 +35,7 @@ export function useProtectedPdfDownload(
 ) {
   const [status, setStatus] = useState<ProtectedDownloadStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -47,7 +51,11 @@ export function useProtectedPdfDownload(
       const record = await getDownload(asset.id);
       if (!active || !mounted.current) return;
       if (!record) {
-        setStatus('idle');
+        const partial = await readPartialPdf(asset.id);
+        if (active && mounted.current) {
+          setStatus(partial ? 'failed' : 'idle');
+          setError(partial ? 'Download paused. Tap to resume.' : null);
+        }
         return;
       }
       const exists = await pdfBlobExists(asset.id);
@@ -70,12 +78,10 @@ export function useProtectedPdfDownload(
       const auth = await authorizeDownload(asset.id);
       if (!mounted.current) return;
       setStatus('downloading');
-
-      const response = await fetch(auth.download_url);
-      if (!response.ok) {
-        throw new Error(`Download failed (${response.status}).`);
-      }
-      const blob = await response.blob();
+      setProgress(0);
+      const blob = await downloadPdfResumable(auth.download_url, asset.id, (ratio) => {
+        if (mounted.current) setProgress(ratio);
+      });
       if (blob.size <= 0) {
         throw new Error('Downloaded file was empty.');
       }
@@ -94,7 +100,10 @@ export function useProtectedPdfDownload(
       };
       await upsertDownload(record);
 
-      if (mounted.current) setStatus('done');
+      if (mounted.current) {
+        setProgress(null);
+        setStatus('done');
+      }
     } catch (e) {
       if (!mounted.current) return;
       if (e instanceof ProtectedPdfError && (e.code === 'access_denied' || e.code === 'revoked')) {
@@ -103,15 +112,18 @@ export function useProtectedPdfDownload(
         return;
       }
       setError(e instanceof Error ? e.message : 'Download failed.');
+      setProgress(null);
       setStatus('failed');
     }
   }, [asset.id, asset.title, asset.subject]);
 
   const remove = useCallback(async () => {
     await removeDownload(asset.id);
+    await clearPartialPdf(asset.id);
     if (mounted.current) {
       setStatus('idle');
       setError(null);
+      setProgress(null);
     }
   }, [asset.id]);
 
@@ -126,5 +138,78 @@ export function useProtectedPdfDownload(
     return result;
   }, [asset.id]);
 
-  return { status, error, download, remove, prepareOpen };
+  return { status, error, progress, download, remove, prepareOpen };
+}
+
+async function downloadPdfResumable(
+  url: string,
+  assetId: string,
+  onProgress: (ratio: number) => void
+): Promise<Blob> {
+  const existing = await readPartialPdf(assetId);
+  const have = existing?.size ?? 0;
+  const headers: HeadersInit = {};
+  if (have > 0) headers.Range = `bytes=${have}-`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, { headers });
+  } catch {
+    throw new Error('Download interrupted. Tap to resume.');
+  }
+  if (response.status === 416) {
+    await clearPartialPdf(assetId);
+    response = await fetch(url);
+  } else if (response.status === 200 && have > 0) {
+    await clearPartialPdf(assetId);
+  }
+  if (!response.ok && response.status !== 206) {
+    throw new Error(`Download failed (${response.status}).`);
+  }
+
+  const prior = response.status === 206 ? existing : null;
+  const range = response.headers.get('Content-Range');
+  const match = range ? /\/(\d+)\s*$/.exec(range) : null;
+  const lengthHeader = Number(response.headers.get('Content-Length') || '0');
+  const total = match ? Number(match[1]) : prior ? (prior.size + lengthHeader) : lengthHeader || null;
+
+  const reader = response.body?.getReader();
+  if (!reader) {
+    const next = await response.blob();
+    const blob = prior ? new Blob([prior, next], { type: 'application/pdf' }) : next;
+    await clearPartialPdf(assetId);
+    onProgress(1);
+    return blob;
+  }
+
+  const chunks: BlobPart[] = [];
+  if (prior) chunks.push(prior);
+  let loaded = prior?.size ?? 0;
+  let sinceSave = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.byteLength;
+      sinceSave += value.byteLength;
+      if (total) onProgress(Math.min(1, loaded / total));
+      if (sinceSave >= 256 * 1024) {
+        sinceSave = 0;
+        await savePartialPdf(assetId, new Blob(chunks, { type: 'application/pdf' }));
+      }
+    }
+  } catch {
+    await savePartialPdf(assetId, new Blob(chunks, { type: 'application/pdf' }));
+    throw new Error('Download interrupted. Tap to resume.');
+  }
+
+  const blob = new Blob(chunks, { type: 'application/pdf' });
+  if (total && blob.size < total) {
+    await savePartialPdf(assetId, blob);
+    throw new Error('Download interrupted. Tap to resume.');
+  }
+  await clearPartialPdf(assetId);
+  onProgress(1);
+  return blob;
 }

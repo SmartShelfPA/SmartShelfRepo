@@ -45,6 +45,13 @@ const STUDENT_ITEMS: NavItem[] = [
     match: (p) => p.startsWith('/igcse'),
   },
   {
+    key: 'study',
+    label: 'This week',
+    icon: 'event-note',
+    href: '/study' as Href,
+    match: (p) => p.startsWith('/study'),
+  },
+  {
     key: 'practice',
     label: 'Practice',
     icon: 'edit-note',
