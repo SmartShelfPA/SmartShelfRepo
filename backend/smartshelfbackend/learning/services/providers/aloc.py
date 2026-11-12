@@ -12,6 +12,25 @@ from learning.services.providers.base import BaseQuestionProvider
 
 logger = logging.getLogger(__name__)
 
+
+def parse_available_years(payload: Any) -> list[int]:
+    """Read exam years out of the ALOC metrics payload."""
+    rows: Any = payload.get("data") if isinstance(payload, dict) else payload
+    if not isinstance(rows, list):
+        return []
+    years: list[int] = []
+    for row in rows:
+        raw = row.get("examyear") if isinstance(row, dict) else row
+        try:
+            year = int(str(raw).strip())
+        except (TypeError, ValueError):
+            continue
+        if 1980 <= year <= 2100 and year not in years:
+            years.append(year)
+    years.sort(reverse=True)
+    return years
+
+
 SESSION_TARGET = 10
 MAX_Q_FETCH_ATTEMPTS = 20
 Q_FETCH_GAP_SEC = 0.05
@@ -84,6 +103,28 @@ class AlocQuestionProvider(BaseQuestionProvider):
             raise AlocProviderError(msg)
 
         return data
+
+    def fetch_available_years(self, *, subject: str, exam_type: str) -> list[int] | None:
+        """Distinct paper years for one subject. None when the bank cannot say."""
+        root = self.base_url.rstrip("/")
+        if root.endswith("/v2"):
+            root = root[: -len("/v2")]
+        url = f"{root}/metrics/years-available-for/{subject.lower()}"
+        try:
+            resp = requests.get(
+                url,
+                params={"type": self._exam_param(exam_type)},
+                headers=self._headers(),
+                timeout=self.timeout,
+            )
+            data = resp.json()
+        except (requests.RequestException, ValueError) as exc:
+            logger.warning("ALOC year list failed for %s/%s: %s", exam_type, subject, exc)
+            return None
+        if not resp.ok:
+            return None
+        years = parse_available_years(data)
+        return years or None
 
     def _flatten_payload(self, data: Any) -> list[dict[str, Any]]:
         if isinstance(data, list):

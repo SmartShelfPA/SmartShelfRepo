@@ -27,6 +27,7 @@ from learning.models import (
     ProtectedPdfAccessLog,
 )
 from learning.question_service import (
+    available_practice_years,
     default_subjects_for_exam,
     default_years,
     fetch_normalized_questions,
@@ -408,6 +409,14 @@ class PracticeYearsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, exam_kind: str):
+        exam_type = "JAMB" if exam_kind.lower() == "jamb" else "WAEC"
+        subject = str(request.query_params.get("subject") or "").strip()
+        if subject:
+            found = available_practice_years(exam_type=exam_type, subject=subject)
+            if found:
+                return Response(found)
+            # An empty bank list must not fall back to the old four-year window.
+            return Response(default_years())
         raw = getattr(settings, "PRACTICE_YEARS_JSON", "") or ""
         if raw.strip():
             try:

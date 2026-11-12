@@ -66,5 +66,24 @@ def default_subjects_for_exam(exam_type: str) -> list[str]:
 
 
 def default_years() -> list[int]:
-    y = timezone.now().year
-    return [y, y - 1, y - 2, y - 3]
+    """Same catalogue the past-papers screen uses when the bank cannot list years.
+
+    Newest first, from the current year back to 2000. This is not a stand-in for
+    papers the bank has listed; callers that know the subject should prefer
+    ``available_practice_years``.
+    """
+    latest = timezone.now().year
+    return list(range(latest, 1999, -1))
+
+
+def available_practice_years(*, exam_type: str, subject: str) -> list[int] | None:
+    """Years that actually have a paper for this exam and subject. None if unknown."""
+    subject = subject.strip().lower()
+    if not subject:
+        return None
+    try:
+        return get_provider_for_exam(exam_type).fetch_available_years(
+            subject=subject, exam_type=exam_type
+        )
+    except Exception:
+        return None
