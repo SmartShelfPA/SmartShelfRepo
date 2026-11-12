@@ -7,6 +7,10 @@ from .models import (
     AssignmentSubmission,
     Message,
     MessageThread,
+    PdfReadingState,
+    RevisionCard,
+    TextbookLicence,
+    TextbookTopic,
 )
 
 
@@ -58,3 +62,24 @@ class MessageThreadAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+@admin.register(TextbookLicence)
+class TextbookLicenceAdmin(admin.ModelAdmin):
+    list_display = ("asset", "organization", "target_class", "term_label", "starts_on", "ends_on")
+    list_filter = ("organization",)
+
+
+@admin.register(TextbookTopic)
+class TextbookTopicAdmin(admin.ModelAdmin):
+    list_display = ("title", "asset", "chapter_label", "organization")
+
+
+@admin.register(RevisionCard)
+class RevisionCardAdmin(admin.ModelAdmin):
+    list_display = ("user", "asset", "page", "next_review_at")
+
+
+@admin.register(PdfReadingState)
+class PdfReadingStateAdmin(admin.ModelAdmin):
+    list_display = ("user", "asset", "page", "updated_at")

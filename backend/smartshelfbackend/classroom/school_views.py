@@ -19,7 +19,9 @@ from learning.serializers import ProtectedPdfAssetSerializer
 from users.models import AuditLog, UserProfile
 from users.permissions import IsSchoolAdmin, IsStaffRole
 
+from .access import licence_allows
 from .accounts import generate_join_code, set_temp_password, unique_username
+from .models import PdfReadingState
 
 
 def _member_payload(u: UserProfile) -> dict:
@@ -227,7 +229,26 @@ def _parse_classes(raw) -> list[str]:
     return [str(c).strip()[:120] for c in parsed if str(c).strip()][:50]
 
 
-def _resource_payload(asset: ProtectedPdfAsset) -> dict:
+def _apply_catalogue(asset: ProtectedPdfAsset, data) -> None:
+    limits = {
+        "author": 255,
+        "edition": 80,
+        "isbn": 20,
+        "publisher_name": 255,
+        "curriculum": 255,
+    }
+    for field, limit in limits.items():
+        if field in data:
+            setattr(asset, field, str(data.get(field) or "").strip()[:limit])
+    if "offline_allowed" in data:
+        raw = data.get("offline_allowed")
+        if isinstance(raw, bool):
+            asset.offline_allowed = raw
+        else:
+            asset.offline_allowed = str(raw).lower() in ("true", "1", "yes", "on")
+
+
+def _resource_payload(asset: ProtectedPdfAsset, reading_page=None) -> dict:
     return {
         **ProtectedPdfAssetSerializer(asset).data,
         "id": str(asset.id),
@@ -236,6 +257,7 @@ def _resource_payload(asset: ProtectedPdfAsset) -> dict:
         "uploaded_by_name": (asset.uploaded_by.full_name or asset.uploaded_by.username)
         if asset.uploaded_by
         else "",
+        "reading_page": reading_page,
     }
 
 
@@ -255,8 +277,14 @@ class SchoolResourceListCreateView(APIView):
             published=True,
             rights_status=ProtectedPdfAsset.RightsStatus.APPROVED,
         ).select_related("uploaded_by").order_by("-created_at")
-        items = [a for a in qs if a.user_can_access(user)]
-        return Response([_resource_payload(a) for a in items])
+        items = [a for a in qs if a.user_can_access(user) and licence_allows(user, a)]
+        pages = {}
+        if items and user.role == UserProfile.Role.STUDENT:
+            pages = {
+                row.asset_id: row.page
+                for row in PdfReadingState.objects.filter(user=user, asset__in=items)
+            }
+        return Response([_resource_payload(a, pages.get(a.id)) for a in items])
 
     def post(self, request):
         user = request.user
@@ -292,6 +320,7 @@ class SchoolResourceListCreateView(APIView):
             audience_classes=_parse_classes(request.data.get("audience_classes")),
             uploaded_by=user,
         )
+        _apply_catalogue(asset, request.data)
         asset.pdf_file.save("upload.pdf", upload, save=False)
         asset.save()
         AuditLog.log(
@@ -327,6 +356,7 @@ class SchoolResourceDetailView(APIView):
         if "audience_classes" in request.data:
             asset.audience_classes = _parse_classes(request.data.get("audience_classes"))
             asset.rights_version += 1
+        _apply_catalogue(asset, request.data)
         if not asset.title:
             return Response({"error": "Title cannot be empty."}, status=400)
         asset.save()

@@ -410,6 +410,19 @@ class ProtectedPdfAsset(models.Model):
     chapter = models.CharField(
         max_length=255, blank=True, help_text="Optional chapter/topic linkage."
     )
+    author = models.CharField(max_length=255, blank=True)
+    edition = models.CharField(max_length=80, blank=True)
+    isbn = models.CharField(max_length=20, blank=True)
+    publisher_name = models.CharField(max_length=255, blank=True)
+    curriculum = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Curriculum coverage, e.g. NERDC SS2 Biology or WAEC.",
+    )
+    offline_allowed = models.BooleanField(
+        default=True,
+        help_text="Publisher has confirmed students may keep an offline copy.",
+    )
     description = models.TextField(blank=True)
     cover_image_url = models.URLField(blank=True)
 

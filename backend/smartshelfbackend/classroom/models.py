@@ -89,6 +89,12 @@ class AssignmentQuestion(models.Model):
     marking_guide = models.TextField(
         blank=True, help_text="Model answer / marking scheme. Shown to students after grading."
     )
+    review_label = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Textbook section to reopen after a wrong answer, e.g. 'Section 3.2'.",
+    )
+    review_page = models.PositiveIntegerField(null=True, blank=True)
     max_marks = models.PositiveSmallIntegerField(default=1)
 
     class Meta:
@@ -210,3 +216,156 @@ class Message(models.Model):
 
     def __str__(self) -> str:
         return self.body[:40]
+
+
+class TextbookLicence(models.Model):
+    """Term-based access to one school textbook for a class, or the whole school."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="textbook_licences"
+    )
+    asset = models.ForeignKey(
+        ProtectedPdfAsset, on_delete=models.CASCADE, related_name="textbook_licences"
+    )
+    target_class = models.CharField(
+        max_length=120,
+        blank=True,
+        help_text="Blank = every class in the school that can already see the book.",
+    )
+    term_label = models.CharField(max_length=80, help_text="e.g. 2026/27 Term 1")
+    starts_on = models.DateField()
+    ends_on = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-starts_on", "term_label"]
+
+    def __str__(self) -> str:
+        who = self.target_class or "All classes"
+        return f"{self.asset} · {who} · {self.term_label}"
+
+
+class TextbookTopic(models.Model):
+    """A chapter topic whose questions are tied to one licensed textbook."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="textbook_topics"
+    )
+    asset = models.ForeignKey(
+        ProtectedPdfAsset, on_delete=models.CASCADE, related_name="topics"
+    )
+    title = models.CharField(max_length=200)
+    chapter_label = models.CharField(max_length=120, blank=True)
+    page_start = models.PositiveIntegerField(null=True, blank=True)
+    page_end = models.PositiveIntegerField(null=True, blank=True)
+    order = models.PositiveSmallIntegerField(default=0)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="textbook_topics_created",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "title"]
+
+    def __str__(self) -> str:
+        return self.title
+
+
+class TopicQuestion(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    topic = models.ForeignKey(TextbookTopic, on_delete=models.CASCADE, related_name="questions")
+    order = models.PositiveSmallIntegerField(default=0)
+    prompt = models.TextField()
+    options = models.JSONField(default=list, blank=True)
+    correct_option_id = models.CharField(max_length=16)
+    explanation = models.TextField(blank=True)
+    review_label = models.CharField(max_length=200, blank=True)
+    review_page = models.PositiveIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["order"]
+
+    def __str__(self) -> str:
+        return self.prompt[:40]
+
+
+class TopicAttempt(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="topic_attempts"
+    )
+    topic = models.ForeignKey(TextbookTopic, on_delete=models.CASCADE, related_name="attempts")
+    score_percent = models.FloatField(default=0)
+    correct_count = models.PositiveSmallIntegerField(default=0)
+    total_count = models.PositiveSmallIntegerField(default=0)
+    completed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-completed_at"]
+
+    def __str__(self) -> str:
+        return f"{self.student} · {self.topic} · {self.score_percent:.0f}%"
+
+
+class TopicAnswer(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    attempt = models.ForeignKey(TopicAttempt, on_delete=models.CASCADE, related_name="answers")
+    question = models.ForeignKey(TopicQuestion, on_delete=models.CASCADE, related_name="answers")
+    selected_option_id = models.CharField(max_length=16, blank=True)
+    is_correct = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["question__order"]
+
+
+class RevisionCard(models.Model):
+    """A student's flashcard pinned to a textbook page."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="revision_cards"
+    )
+    asset = models.ForeignKey(
+        ProtectedPdfAsset, on_delete=models.CASCADE, related_name="revision_cards"
+    )
+    page = models.PositiveIntegerField(default=1)
+    front = models.TextField(help_text="Passage or prompt saved from the page.")
+    back = models.TextField(help_text="The student's own note or answer.")
+    box = models.PositiveSmallIntegerField(default=0, help_text="0, 1, or 2 — how well it is known.")
+    next_review_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["next_review_at", "-updated_at"]
+
+    def __str__(self) -> str:
+        return self.front[:40]
+
+
+class PdfReadingState(models.Model):
+    """Last page on a protected PDF, shared across the student's devices."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="pdf_reading_states"
+    )
+    asset = models.ForeignKey(
+        ProtectedPdfAsset, on_delete=models.CASCADE, related_name="reading_states"
+    )
+    page = models.PositiveIntegerField(default=1)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "asset"], name="classroom_unique_pdf_reading")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} · p{self.page}"

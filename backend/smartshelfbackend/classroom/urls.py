@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import messaging_views, school_views, views
+from . import messaging_views, school_views, study_views, views
 
 urlpatterns = [
     # Teacher
@@ -33,6 +33,30 @@ urlpatterns = [
         views.StudentAssignmentSubmitView.as_view(),
         name="student-assignment-submit",
     ),
+    path("student/topics/", study_views.StudentTopicListView.as_view(), name="student-topics"),
+    path(
+        "student/topics/<uuid:pk>/",
+        study_views.StudentTopicDetailView.as_view(),
+        name="student-topic-detail",
+    ),
+    path(
+        "student/topics/<uuid:pk>/attempts/",
+        study_views.StudentTopicAttemptView.as_view(),
+        name="student-topic-attempt",
+    ),
+    path("student/progress/", study_views.StudentProgressView.as_view(), name="student-progress"),
+    path("student/study-plan/", study_views.StudentStudyPlanView.as_view(), name="student-study-plan"),
+    path("student/cards/", study_views.StudentCardListCreateView.as_view(), name="student-cards"),
+    path(
+        "student/cards/<uuid:pk>/",
+        study_views.StudentCardDetailView.as_view(),
+        name="student-card-detail",
+    ),
+    path(
+        "student/reading/<uuid:pk>/",
+        study_views.StudentReadingStateView.as_view(),
+        name="student-reading-state",
+    ),
     # School administration & school-only resources
     path("school/", school_views.SchoolOverviewView.as_view(), name="school-overview"),
     path("school/members/", school_views.SchoolMemberListCreateView.as_view(), name="school-members"),
@@ -45,6 +69,19 @@ urlpatterns = [
         "school/members/<uuid:pk>/reset-password/",
         school_views.SchoolMemberResetPasswordView.as_view(),
         name="school-member-reset-password",
+    ),
+    path("school/members/import/", study_views.SchoolMemberImportView.as_view(), name="school-member-import"),
+    path("school/licences/", study_views.SchoolLicenceListCreateView.as_view(), name="school-licences"),
+    path(
+        "school/licences/<uuid:pk>/",
+        study_views.SchoolLicenceDetailView.as_view(),
+        name="school-licence-detail",
+    ),
+    path("school/topics/", study_views.SchoolTopicListCreateView.as_view(), name="school-topics"),
+    path(
+        "school/topics/<uuid:pk>/",
+        study_views.SchoolTopicDetailView.as_view(),
+        name="school-topic-detail",
     ),
     path("school/resources/", school_views.SchoolResourceListCreateView.as_view(), name="school-resources"),
     path(

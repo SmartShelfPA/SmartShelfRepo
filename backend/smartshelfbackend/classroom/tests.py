@@ -471,3 +471,166 @@ class SetupBetaSchoolCommandTests(TestCase):
         self.assertEqual(parent.managed_students.count(), 1)
         self.assertEqual(Assignment.objects.filter(organization=org).count(), 1)
         self.assertIn("password=", out.getvalue())
+
+class StudyWorkspaceTests(BaseSchoolTest):
+    def _upload(self, **extra):
+        payload = {
+            "title": "New School Biology",
+            "subject": "Biology",
+            "author": "Ada Okonkwo",
+            "edition": "3rd",
+            "isbn": "9780000000001",
+            "publisher_name": "Learn Africa",
+            "curriculum": "NERDC SS2 Biology",
+            "offline_allowed": "true",
+            "rights_confirmed": "true",
+            "audience_classes": '["SS2A"]',
+            "file": SimpleUploadedFile("bio.pdf", PDF_BYTES, content_type="application/pdf"),
+        }
+        payload.update(extra)
+        return client_for(self.teacher).post("/api/v1/school/resources/", payload, format="multipart")
+
+    def test_catalogue_fields_and_school_shelf(self):
+        res = self._upload()
+        self.assertEqual(res.status_code, 201, res.content)
+        body = res.json()
+        self.assertEqual(body["edition"], "3rd")
+        self.assertEqual(body["curriculum"], "NERDC SS2 Biology")
+        self.assertEqual(body["isbn"], "9780000000001")
+        shelf = client_for(self.student).get("/api/v1/school/resources/").json()
+        self.assertEqual(shelf[0]["title"], "New School Biology")
+        self.assertEqual(client_for(self.student2).get("/api/v1/school/resources/").json(), [])
+
+    def test_term_licence_hides_book_outside_the_term(self):
+        asset_id = self._upload(audience_classes="[]").json()["id"]
+        today = timezone.localdate()
+        res = client_for(self.teacher).post(
+            "/api/v1/school/licences/",
+            {
+                "asset_id": asset_id,
+                "target_class": "SS2A",
+                "term_label": "Term 1",
+                "starts_on": (today + timedelta(days=10)).isoformat(),
+                "ends_on": (today + timedelta(days=40)).isoformat(),
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertEqual(client_for(self.student).get("/api/v1/school/resources/").json(), [])
+        self.assertEqual(
+            client_for(self.student).post(f"/api/v1/igcse/pdfs/{asset_id}/authorize-download/").status_code,
+            403,
+        )
+
+    def test_chapter_quiz_review_and_progress_stay_separate(self):
+        asset_id = self._upload(audience_classes="[]").json()["id"]
+        created = client_for(self.teacher).post(
+            "/api/v1/school/topics/",
+            {
+                "asset_id": asset_id,
+                "title": "Cells",
+                "chapter_label": "Chapter 2",
+                "page_start": 12,
+                "questions": [
+                    {
+                        "prompt": "Where is the nucleus?",
+                        "options": [{"id": "A", "label": "In the cell"}, {"id": "B", "label": "Outside"}],
+                        "correct_option_id": "A",
+                        "explanation": "The nucleus sits inside the cell.",
+                        "review_label": "Section 2.1",
+                        "review_page": 14,
+                    }
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        topic_id = created.json()["id"]
+        detail = client_for(self.student).get(f"/api/v1/student/topics/{topic_id}/").json()
+        self.assertNotIn("correct_option_id", detail["questions"][0])
+        attempt = client_for(self.student).post(
+            f"/api/v1/student/topics/{topic_id}/attempts/",
+            {"answers": [{"question_id": detail["questions"][0]["id"], "selected_option_id": "B"}]},
+            format="json",
+        )
+        self.assertEqual(attempt.status_code, 200, attempt.content)
+        revealed = attempt.json()["questions"][0]
+        self.assertFalse(revealed["is_correct"])
+        self.assertEqual(revealed["review_label"], "Section 2.1")
+        self.assertEqual(revealed["review_page"], 14)
+        progress = client_for(self.student).get("/api/v1/student/progress/").json()
+        self.assertEqual(progress["understanding"]["topics"][0]["status"], "retry")
+        self.assertIn("activity", progress["reading_activity"]["note"])
+
+    def test_import_study_plan_cards_reading_sync_and_resume(self):
+        imported = client_for(self.teacher).post(
+            "/api/v1/school/members/import/",
+            {"csv": "full_name,email,class\nBola Ade,bola@school.test,SS2A\n"},
+            format="json",
+        )
+        self.assertEqual(imported.status_code, 200, imported.content)
+        self.assertEqual(imported.json()["created"][0]["student_class"], "SS2A")
+        self.assertTrue(imported.json()["created"][0]["temporary_password"])
+
+        asset_id = self._upload(audience_classes="[]").json()["id"]
+        saved = client_for(self.student).put(
+            f"/api/v1/student/reading/{asset_id}/", {"page": 18}, format="json"
+        )
+        self.assertEqual(saved.status_code, 200, saved.content)
+        self.assertTrue(saved.json()["synced"])
+        again = client_for(self.student).get(f"/api/v1/student/reading/{asset_id}/").json()
+        self.assertEqual(again["page"], 18)
+
+        card = client_for(self.student).post(
+            "/api/v1/student/cards/",
+            {"asset_id": asset_id, "page": 18, "front": "Mitochondria", "back": "Makes energy"},
+            format="json",
+        )
+        self.assertEqual(card.status_code, 201, card.content)
+        plan = client_for(self.student).get("/api/v1/student/study-plan/").json()
+        kinds = {item["kind"] for item in plan["items"]}
+        self.assertIn("reading", kinds)
+        self.assertIn("cards", kinds)
+
+        auth = client_for(self.student).post(f"/api/v1/igcse/pdfs/{asset_id}/authorize-download/")
+        self.assertEqual(auth.status_code, 200, auth.content)
+        self.assertGreater(auth.json()["file_size_bytes"], 0)
+        token = auth.json()["token"]
+        partial = client_for(self.student).get(
+            f"/api/v1/igcse/pdfs/{asset_id}/download/?token={token}",
+            HTTP_RANGE="bytes=0-3",
+        )
+        self.assertEqual(partial.status_code, 206)
+        self.assertEqual(b"".join(partial.streaming_content), PDF_BYTES[:4])
+        self.assertIn("bytes 0-3/", partial["Content-Range"])
+
+    def test_reading_assignment_can_include_a_short_assessment(self):
+        asset_id = self._upload(audience_classes="[]").json()["id"]
+        res = client_for(self.teacher).post(
+            "/api/v1/staff/assignments/",
+            {
+                "title": "Read cells",
+                "kind": "reading",
+                "target_class": "SS2A",
+                "resource_id": asset_id,
+                "resource_pages": "12-16",
+                "questions": [
+                    {
+                        "kind": "mcq",
+                        "prompt": "What holds the DNA?",
+                        "options": [{"id": "A", "label": "Nucleus"}, {"id": "B", "label": "Wall"}],
+                        "correct_option_id": "A",
+                        "review_label": "Section 2.1",
+                        "review_page": 14,
+                    }
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201, res.content)
+        listed = client_for(self.student).get("/api/v1/student/assignments/").json()
+        detail = client_for(self.student).get(f"/api/v1/student/assignments/{listed[0]['id']}/").json()
+        self.assertEqual(detail["questions"][0]["review_page"], 14)
+        weekly = client_for(self.parent).get("/api/v1/parent/dashboard/").json()["children"][0]["weekly"]
+        self.assertTrue(weekly["supportSuggestions"])
+        self.assertIn("activity", weekly["readingNote"])
