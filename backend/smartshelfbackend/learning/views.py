@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import json
 import logging
 
@@ -39,6 +40,7 @@ from learning.services.bundled_epubs import (
     resolve_bundled_epub_path,
 )
 from learning.services.explain import fetch_ai_answer_explanation
+from classroom.access import licence_allows
 from learning.services.providers.aloc_errors import AlocProviderError
 from learning.serializers import (
     IgcsBookmarkSerializer,
@@ -655,7 +657,7 @@ def _accessible_protected_pdfs(user):
     if not is_staff:
         qs = qs.exclude(access_level=ProtectedPdfAsset.AccessLevel.STAFF)
     if getattr(user, "role", "") == "student":
-        allowed = [a.pk for a in qs if a.audience_allows(user)]
+        allowed = [a.pk for a in qs if a.audience_allows(user) and licence_allows(user, a)]
         qs = qs.filter(pk__in=allowed)
     return qs
 
@@ -695,7 +697,7 @@ class ProtectedPdfAuthorizeDownloadView(APIView):
         asset = get_object_or_404(ProtectedPdfAsset, pk=pk)
         user = request.user
 
-        if not asset.user_can_access(user):
+        if not asset.user_can_access(user) or not licence_allows(user, asset):
             ProtectedPdfAccessLog.objects.create(
                 asset=asset,
                 user=user if getattr(user, "pk", None) else None,
@@ -711,6 +713,8 @@ class ProtectedPdfAuthorizeDownloadView(APIView):
         token = make_download_token(asset_id=asset.id, user_id=user.pk)
         max_age = getattr(settings, "PROTECTED_DOWNLOAD_TOKEN_MAX_AGE", 300)
         offline_days = getattr(settings, "PROTECTED_OFFLINE_ACCESS_DAYS", 30)
+        if not asset.offline_allowed:
+            offline_days = 0
         now = timezone.now()
 
         ProtectedPdfAccessLog.objects.create(
@@ -734,6 +738,7 @@ class ProtectedPdfAuthorizeDownloadView(APIView):
                 ).isoformat(),
                 "rights_version": asset.rights_version,
                 "file_size_bytes": asset.file_size_bytes,
+                "offline_allowed": asset.offline_allowed,
             }
         )
 
@@ -786,15 +791,60 @@ class ProtectedPdfDownloadView(APIView):
             ip_address=client_ip(request),
         )
 
-        resp = FileResponse(
-            asset.pdf_file.open("rb"),
-            content_type="application/pdf",
-            as_attachment=False,
-            filename=f"{asset.title}.pdf",
-        )
-        resp["Content-Disposition"] = f'inline; filename="{asset.title}.pdf"'
-        resp["Cache-Control"] = "no-store"
+        resp = _ranged_pdf_response(request, asset)
         return resp
+
+
+def _ranged_pdf_response(request, asset: ProtectedPdfAsset):
+    """Stream a PDF and honour a single ``Range: bytes=`` header so a dropped download can resume."""
+    handle = asset.pdf_file.open("rb")
+    try:
+        handle.seek(0, 2)
+        size = handle.tell()
+    except (OSError, AttributeError):
+        data = handle.read()
+        handle.close()
+        handle = io.BytesIO(data)
+        size = len(data)
+
+    start, end = 0, max(size - 1, 0)
+    status_code = 200
+    range_header = request.META.get("HTTP_RANGE", "")
+    if range_header.startswith("bytes=") and size > 0:
+        spec = range_header[6:].split(",")[0].strip()
+        try:
+            left, _, right = spec.partition("-")
+            if left == "":
+                suffix = int(right or "0")
+                start = max(size - suffix, 0)
+                end = size - 1
+            else:
+                start = int(left)
+                end = int(right) if right else size - 1
+            if start < 0 or start >= size or end < start:
+                handle.close()
+                denied = StreamingHttpResponse(status=416)
+                denied["Content-Range"] = f"bytes */{size}"
+                return denied
+            end = min(end, size - 1)
+            status_code = 206
+        except ValueError:
+            start, end = 0, max(size - 1, 0)
+
+    handle.seek(start)
+    chunk = handle.read(0 if size == 0 else end - start + 1)
+    handle.close()
+    resp = StreamingHttpResponse(
+        iter([chunk]), content_type="application/pdf", status=status_code
+    )
+    safe_name = asset.title.replace('"', "")
+    resp["Content-Disposition"] = f'inline; filename="{safe_name}.pdf"'
+    resp["Accept-Ranges"] = "bytes"
+    resp["Content-Length"] = str(len(chunk))
+    resp["Cache-Control"] = "no-store"
+    if status_code == 206:
+        resp["Content-Range"] = f"bytes {start}-{end}/{size}"
+    return resp
 
 
 def signing_unpack(token: str) -> dict:

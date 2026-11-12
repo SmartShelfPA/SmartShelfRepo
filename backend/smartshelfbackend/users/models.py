@@ -360,6 +360,12 @@ class Book(models.Model):
     isbn = models.CharField(max_length=20)
     title = models.CharField(max_length=255)
     author = models.CharField(max_length=255)
+    edition = models.CharField(max_length=80, blank=True)
+    curriculum = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Curriculum this edition covers, e.g. NERDC SS2 Biology or WAEC.",
+    )
     cover_image_url = models.URLField(blank=True)
     cover_image_file = models.FileField(upload_to="book-covers/", blank=True)
     description = models.TextField(blank=True)

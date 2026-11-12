@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from classroom.models import Assignment, AssignmentSubmission
+from classroom.progress import weekly_summary
 from learning.models import IgcsUserReading, PracticeSession
 
 from .models import ReadingProgress, TeacherNote, UserProfile
@@ -134,6 +135,7 @@ def _parent_child_summary(child, now) -> dict:
             }
             for s in submissions
         ],
+        "weekly": weekly_summary(child, now),
         "teacherNotes": [
             {
                 "id": str(n.id),
