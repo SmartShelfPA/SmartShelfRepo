@@ -649,6 +649,32 @@ export const requestPasswordResetCode = async (
   };
 };
 
+export const changePassword = async (
+  currentPassword: string,
+  newPassword: string
+): Promise<void> => {
+  const response = await apiRequest('/auth/change-password/', {
+    method: 'POST',
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
+  let data: unknown = null;
+  try {
+    data = await response.json();
+  } catch {
+    // ignore parse errors and throw fallback below
+  }
+  if (!response.ok) {
+    const message =
+      data && typeof data === 'object' && typeof (data as { error?: string }).error === 'string'
+        ? (data as { error: string }).error
+        : 'Could not change password';
+    throw new Error(message);
+  }
+};
+
 export const confirmPasswordReset = async (
   email: string,
   code: string,

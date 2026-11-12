@@ -1,9 +1,11 @@
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 import logging
 import os
+import re
 from rest_framework import serializers, status
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
@@ -334,6 +336,61 @@ class ValidateTokenView(APIView):
 
     def get(self, request):
         return Response({"valid": True, "user_id": str(request.user.id)})
+
+
+def password_policy_message(password: str, user) -> str:
+    """Same rules the sign-up form enforces, plus Django's similarity and common-password checks."""
+    problems = []
+    if len(password) < 8:
+        problems.append("be at least 8 characters")
+    if not re.search(r"[A-Z]", password):
+        problems.append("include an uppercase letter")
+    if not re.search(r"[a-z]", password):
+        problems.append("include a lowercase letter")
+    if not re.search(r"[0-9]", password):
+        problems.append("include a number")
+    if not re.search(r"[^A-Za-z0-9]", password):
+        problems.append("include a special character")
+    if problems:
+        return "Password must " + ", ".join(problems) + "."
+    try:
+        validate_password(password, user=user)
+    except DjangoValidationError as exc:
+        return " ".join(exc.messages)
+    return ""
+
+
+class ChangePasswordView(APIView):
+    """Signed-in students, parents, teachers, and publishers set a new password."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        current = request.data.get("current_password")
+        new = request.data.get("new_password")
+        if not isinstance(current, str) or not isinstance(new, str) or not current or not new:
+            return Response(
+                {"error": "Enter your current password and a new password."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user = request.user
+        if not user.check_password(current):
+            return Response(
+                {"error": "Current password is incorrect."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if new == current:
+            return Response(
+                {"error": "Choose a password that is different from your current one."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        message = password_policy_message(new, user)
+        if message:
+            return Response({"error": message}, status=status.HTTP_400_BAD_REQUEST)
+        user.set_password(new)
+        user.save(update_fields=["password"])
+        user.clear_failed_logins()
+        return Response({"success": True, "message": "Password updated."})
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):

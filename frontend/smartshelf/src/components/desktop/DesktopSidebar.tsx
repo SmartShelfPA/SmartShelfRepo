@@ -92,7 +92,14 @@ export function DesktopSidebar() {
                 href: (role === 'staff' ? '/teacher' : '/parent') as Href,
                 match: (p: string) => p.includes(role === 'staff' ? '/teacher' : '/parent'),
               }
-            : item
+              : role === 'parent'
+                ? {
+                    ...item,
+                    label: 'Password',
+                    href: '/change-password' as Href,
+                    match: (p: string) => p.includes('change-password'),
+                  }
+                : item
         )
       : STUDENT_ITEMS;
 
