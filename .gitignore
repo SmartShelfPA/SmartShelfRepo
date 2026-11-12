@@ -186,6 +186,8 @@ secrets.json
 *.pem
 *.key
 *.cert
+meadow_hall_credentials.csv
+meadow_hall_participants.csv
 
 # Build outputs
 build/
