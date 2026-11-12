@@ -85,7 +85,21 @@ export function DesktopSidebar() {
   const role = user?.role;
   const items =
     role === 'staff' || role === 'parent'
-      ? STUDENT_ITEMS.filter((item) => item.key === 'home' || item.key === 'profile').map((item) =>
+      ? [
+          ...STUDENT_ITEMS.filter((item) => item.key === 'home'),
+          ...(role === 'staff'
+            ? [
+                {
+                  key: 'past-questions',
+                  label: 'Past questions',
+                  icon: 'quiz' as const,
+                  href: '/staff/past-questions' as Href,
+                  match: (p: string) => p.includes('/past-questions'),
+                },
+              ]
+            : []),
+          ...STUDENT_ITEMS.filter((item) => item.key === 'profile'),
+        ].map((item) =>
           item.key === 'home'
             ? {
                 ...item,

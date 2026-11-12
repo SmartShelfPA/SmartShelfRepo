@@ -10,6 +10,8 @@ import {
   gradeSubmission,
   type StaffSubmissionDetail,
 } from '@/src/api/assignments';
+import { plainTextFromPracticeHtml } from '@/src/api/explainAnswer';
+import { AssignmentPrompt, paperSourceLabel } from '@/src/components/practice/AssignmentPrompt';
 import { Button, Card, CenteredState, Field, Muted, Screen, SectionLabel, useKitTheme } from '@/src/components/ui/kit';
 import { useRequireRole } from '@/src/hooks/useRequireRole';
 import { formatShortDate } from '@/src/lib/dates';
@@ -151,11 +153,19 @@ export default function MarkSubmissionScreen() {
                 <Muted style={{ fontSize: 12 }}>
                   {i + 1}. {QUESTION_KIND_LABELS[q.kind]} · out of {q.max_marks}
                 </Muted>
-                <ThemedText style={styles.prompt}>{q.prompt}</ThemedText>
+                <AssignmentPrompt
+                  prompt={q.prompt}
+                  diagramUrl={q.diagram_url}
+                  source={paperSourceLabel(q.review_label)}
+                  color={t.text}
+                  textStyle={styles.prompt}
+                />
                 {q.kind === 'mcq' ? (
                   <ThemedText
                     style={{ color: answer?.is_correct ? '#00C832' : t.danger, fontWeight: '600' }}>
-                    {chosen ? `${chosen.id}. ${chosen.label}` : 'No answer'}
+                    {chosen
+                      ? `${chosen.id}. ${plainTextFromPracticeHtml(chosen.label) || chosen.label}`
+                      : 'No answer'}
                     {answer?.is_correct ? '  ✓ correct' : ` ✗ (answer: ${q.correct_option_id})`}
                   </ThemedText>
                 ) : (

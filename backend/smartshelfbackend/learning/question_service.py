@@ -15,16 +15,22 @@ def get_provider_for_exam(exam_type: str) -> AlocQuestionProvider:
     return AlocQuestionProvider()
 
 
-def fetch_normalized_questions(*, exam_type: str, subject: str, year: int) -> list[dict]:
+def fetch_normalized_questions(
+    *, exam_type: str, subject: str, year: int, strict_year: bool = False
+) -> list[dict]:
     ttl = int(getattr(settings, "QUESTION_CACHE_TTL_SECONDS", 3600))
     provider = get_provider_for_exam(exam_type)
-    batch_key = QuestionCacheBatch.make_batch_key(provider.name, exam_type, subject, year)
+    batch_key = QuestionCacheBatch.make_batch_key(
+        provider.name, exam_type, subject, year, "strict" if strict_year else ""
+    )
     now = timezone.now()
     batch = QuestionCacheBatch.objects.filter(batch_key=batch_key, expires_at__gt=now).first()
     if batch and isinstance(batch.questions_json, list) and batch.questions_json:
         return batch.questions_json
 
-    raw_items = provider.fetch_questions(exam_type=exam_type, subject=subject, year=year)
+    raw_items = provider.fetch_questions(
+        exam_type=exam_type, subject=subject, year=year, strict_year=strict_year
+    )
     normalized: list[dict] = []
     for idx, raw in enumerate(raw_items):
         normalized.append(

@@ -3,6 +3,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from learning.models import ProtectedPdfAsset
+from learning.services.normalize import clean_diagram
 
 from .models import Assignment, AssignmentAnswer, AssignmentQuestion, AssignmentSubmission
 
@@ -12,12 +13,16 @@ MAX_QUESTIONS = 50
 class QuestionWriteSerializer(serializers.Serializer):
     kind = serializers.ChoiceField(choices=AssignmentQuestion.Kind.choices)
     prompt = serializers.CharField(max_length=5000)
+    diagram_url = serializers.CharField(required=False, allow_blank=True, max_length=8000)
     options = serializers.ListField(child=serializers.DictField(), required=False, default=list)
     correct_option_id = serializers.CharField(required=False, allow_blank=True, max_length=16)
     marking_guide = serializers.CharField(required=False, allow_blank=True, max_length=5000)
+    review_label = serializers.CharField(required=False, allow_blank=True, max_length=200)
+    review_page = serializers.IntegerField(required=False, allow_null=True, min_value=1)
     max_marks = serializers.IntegerField(required=False, min_value=1, max_value=100, default=1)
 
     def validate(self, attrs):
+        attrs["diagram_url"] = clean_diagram(attrs.get("diagram_url") or "")
         if attrs["kind"] != AssignmentQuestion.Kind.MULTIPLE_CHOICE:
             attrs["options"] = []
             attrs["correct_option_id"] = ""
@@ -67,13 +72,12 @@ class AssignmentCreateSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     "Reading assignments need a resource or instructions describing what to read."
                 )
-        if kind == Assignment.Kind.QUESTIONS:
-            questions = attrs.get("questions") or []
-            if not questions:
-                raise serializers.ValidationError("Add at least one question.")
-            if len(questions) > MAX_QUESTIONS:
-                raise serializers.ValidationError(f"At most {MAX_QUESTIONS} questions per assignment.")
-        else:
+        questions = attrs.get("questions") or []
+        if len(questions) > MAX_QUESTIONS:
+            raise serializers.ValidationError(f"At most {MAX_QUESTIONS} questions per assignment.")
+        if kind == Assignment.Kind.QUESTIONS and not questions:
+            raise serializers.ValidationError("Add at least one question.")
+        if kind == Assignment.Kind.PRACTICE:
             attrs["questions"] = []
         return attrs
 
@@ -97,8 +101,11 @@ def question_payload(q: AssignmentQuestion, *, reveal: bool) -> dict:
         "order": q.order,
         "kind": q.kind,
         "prompt": q.prompt,
+        "diagram_url": q.diagram_url,
         "options": q.options,
         "max_marks": q.max_marks,
+        "review_label": q.review_label,
+        "review_page": q.review_page,
     }
     if reveal:
         data["correct_option_id"] = q.correct_option_id

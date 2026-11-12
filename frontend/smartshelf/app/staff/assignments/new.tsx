@@ -47,6 +47,8 @@ type DraftQuestion = {
   correct: string;
   guide: string;
   marks: string;
+  reviewLabel: string;
+  reviewPage: string;
 };
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -124,6 +126,8 @@ function newQuestion(kind: QuestionKind = 'mcq'): DraftQuestion {
     correct: 'A',
     guide: '',
     marks: kind === 'theory' ? '5' : '1',
+    reviewLabel: '',
+    reviewPage: '',
   };
 }
 
@@ -329,9 +333,10 @@ export default function NewAssignmentScreen() {
     if (kind === 'reading' && !resourceId && !instructions.trim()) {
       return fail('Pick a resource or describe what students should read.');
     }
-    if (kind === 'questions') {
-      for (const [i, q] of questions.entries()) {
-        if (!q.prompt.trim()) return fail(`Question ${i + 1} has no text.`);
+    const filledQuestions = questions.filter((q) => q.prompt.trim());
+    if (kind === 'questions' && filledQuestions.length === 0) return fail('Add at least one question.');
+    if (kind === 'questions' || kind === 'reading') {
+      for (const [i, q] of filledQuestions.entries()) {
         if (q.kind === 'mcq') {
           const filled = q.options.filter((o) => o.label.trim());
           if (filled.length < 2) return fail(`Question ${i + 1} needs at least two options.`);
@@ -353,14 +358,16 @@ export default function NewAssignmentScreen() {
         due_at: due,
         ...(kind === 'practice' ? { exam_type: examType, subject, year } : {}),
         ...(kind === 'reading' ? { resource_id: resourceId, resource_pages: pages.trim() } : {}),
-        ...(kind === 'questions'
+        ...((kind === 'questions' || kind === 'reading') && filledQuestions.length
           ? {
-              questions: questions.map((q) => ({
+              questions: filledQuestions.map((q) => ({
                 kind: q.kind,
                 prompt: q.prompt.trim(),
                 options: q.kind === 'mcq' ? q.options.filter((o) => o.label.trim()) : [],
                 correct_option_id: q.kind === 'mcq' ? q.correct : '',
                 marking_guide: q.guide.trim(),
+                review_label: q.reviewLabel.trim(),
+                review_page: q.reviewPage.trim() ? Number(q.reviewPage) : null,
                 max_marks: Math.max(1, Math.min(100, Number(q.marks) || 1)),
               })),
             }
@@ -599,9 +606,11 @@ export default function NewAssignmentScreen() {
         </>
       ) : null}
 
-      {kind === 'questions' ? (
+      {kind === 'questions' || kind === 'reading' ? (
         <>
-          <SectionLabel>QUESTIONS · {totalMarks} MARKS</SectionLabel>
+          <SectionLabel>
+            {kind === 'reading' ? 'SHORT ASSESSMENT (OPTIONAL)' : `QUESTIONS · ${totalMarks} MARKS`}
+          </SectionLabel>
           {questions.map((q, i) => (
             <Card key={q.key}>
               <View style={styles.qHeader}>
@@ -682,6 +691,18 @@ export default function NewAssignmentScreen() {
                   multiline
                 />
               )}
+              <Field
+                label="Section to review if this is missed"
+                value={q.reviewLabel}
+                onChangeText={(v) => updateQuestion(q.key, { reviewLabel: v })}
+                placeholder="e.g. Section 3.2"
+              />
+              <Field
+                label="Review page"
+                value={q.reviewPage}
+                onChangeText={(v) => updateQuestion(q.key, { reviewPage: v.replace(/[^0-9]/g, '') })}
+                keyboardType="number-pad"
+              />
               <Field
                 label="Marks"
                 value={q.marks}

@@ -30,7 +30,6 @@ def parse_available_years(payload: Any) -> list[int]:
     years.sort(reverse=True)
     return years
 
-
 SESSION_TARGET = 10
 MAX_Q_FETCH_ATTEMPTS = 20
 Q_FETCH_GAP_SEC = 0.05
@@ -201,12 +200,26 @@ class AlocQuestionProvider(BaseQuestionProvider):
         exam_type: str,
         subject: str,
         year: int,
+        strict_year: bool = False,
     ) -> list[dict[str, Any]]:
         bulk: list[dict[str, Any]] = []
+        year_error: AlocProviderError | None = None
         try:
             bulk = self._fetch_many(exam_type=exam_type, subject=subject, year=year)
         except AlocProviderError as exc:
+            year_error = exc
             logger.warning("ALOC /m failed for %s/%s/%s: %s", exam_type, subject, year, exc)
+
+        if bulk:
+            return bulk[:40]
+
+        # A teacher picking 2011 must not be handed a different year's paper.
+        if strict_year and year and year > 0:
+            if year_error is not None:
+                raise year_error
+            raise AlocProviderError(
+                f"No {exam_type} {subject} questions for {year}. Choose another year."
+            )
 
         if not bulk:
             try:
@@ -286,6 +299,7 @@ class AlocQuestionNormalizerMixin:
                 correct_id = letters[idx]
 
         qid = str(aloc_item.get("id") or aloc_item.get("question_id") or f"aloc-{index}")
+        image = aloc_item.get("image") or aloc_item.get("image_url") or aloc_item.get("diagram") or ""
 
         return {
             "id": qid,
@@ -293,4 +307,6 @@ class AlocQuestionNormalizerMixin:
             "options": options_out,
             "correct": correct_id or (letters[0] if options_out else "A"),
             "explanation": explanation,
+            "year": aloc_item.get("examyear") or aloc_item.get("year"),
+            "image": image if isinstance(image, str) else "",
         }

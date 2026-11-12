@@ -35,6 +35,8 @@ export type AssignmentQuestion = {
   max_marks: number;
   correct_option_id?: string;
   marking_guide?: string;
+  review_label?: string;
+  review_page?: number | null;
 };
 
 export type AssignmentAnswer = {
@@ -119,6 +121,8 @@ export type QuestionDraft = {
   options?: QuestionOption[];
   correct_option_id?: string;
   marking_guide?: string;
+  review_label?: string;
+  review_page?: number | null;
   max_marks?: number;
 };
 

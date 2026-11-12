@@ -437,9 +437,10 @@ class PracticeQuestionsView(APIView):
         exam_type = "JAMB" if exam_kind.lower() == "jamb" else "WAEC"
         if not subject:
             return Response({"error": "subject is required"}, status=400)
+        strict_year = str(request.query_params.get("strict") or "").lower() in {"1", "true", "yes"}
         try:
             questions = fetch_normalized_questions(
-                exam_type=exam_type, subject=subject, year=year
+                exam_type=exam_type, subject=subject, year=year, strict_year=strict_year
             )
         except AlocProviderError as exc:
             return Response({"error": str(exc)}, status=503)
