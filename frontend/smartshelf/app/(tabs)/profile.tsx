@@ -121,7 +121,7 @@ export default function ProfileScreen() {
             },
             { label: 'PRICES', action: () => setShowPrices(true) },
             { label: 'MY BIO', action: () => Alert.alert('My Bio', 'Coming soon.') },
-            { label: 'CHANGE PASSWORD', action: () => Alert.alert('Change Password', 'Coming soon.') },
+            { label: 'CHANGE PASSWORD', action: () => router.push('/change-password') },
             { label: 'MY ACHIEVEMENTS', action: () => setShowAchievements(true) },
           ].map((item) => (
             <TouchableOpacity

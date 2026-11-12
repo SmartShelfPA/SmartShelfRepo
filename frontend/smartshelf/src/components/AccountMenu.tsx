@@ -35,6 +35,7 @@ export function AccountMenu({ visible, onClose, title, subtitle, extraItems = []
 
   const items: AccountMenuItem[] = [
     ...extraItems,
+    { id: 'password', label: 'Change password', icon: 'lock', href: '/change-password' },
     { id: 'tour', label: 'Show me around', icon: 'explore', onPress: openNavTutorial },
     { id: 'help', label: 'Help & feedback', icon: 'support-agent', href: '/feedback' },
     { id: 'privacy', label: 'Privacy & data', icon: 'privacy-tip', href: '/privacy-data' },

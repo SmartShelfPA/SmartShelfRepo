@@ -46,6 +46,55 @@ class BaseSchoolTest(TestCase):
         self.outsider = make_user("outsider", UserProfile.Role.STUDENT, self.other_org, student_class="SS2A")
 
 
+class ChangePasswordTests(BaseSchoolTest):
+    def test_each_role_can_replace_its_password_and_keep_the_session(self):
+        publisher = make_user("publisher1", UserProfile.Role.PUBLISHER, None)
+        for user in (self.student, self.parent, self.teacher, publisher):
+            client = client_for(user)
+            token = Token.objects.get(user=user).key
+            res = client.post(
+                "/api/v1/auth/change-password/",
+                {"current_password": "Passw0rd!x", "new_password": "Shelf4812!ab"},
+                format="json",
+            )
+            self.assertEqual(res.status_code, 200, res.content)
+            self.assertEqual(res.json()["message"], "Password updated.")
+            user.refresh_from_db()
+            self.assertTrue(user.check_password("Shelf4812!ab"))
+            self.assertFalse(user.check_password("Passw0rd!x"))
+            self.assertEqual(Token.objects.get(user=user).key, token)
+            still_in = APIClient()
+            still_in.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+            self.assertEqual(still_in.get("/api/v1/auth/validate/").status_code, 200)
+
+    def test_change_password_rejects_a_wrong_or_weak_password(self):
+        client = client_for(self.student)
+        wrong = client.post(
+            "/api/v1/auth/change-password/",
+            {"current_password": "nope", "new_password": "Shelf4812!ab"},
+            format="json",
+        )
+        self.assertEqual(wrong.status_code, 400)
+        self.assertEqual(wrong.json()["error"], "Current password is incorrect.")
+        weak = client.post(
+            "/api/v1/auth/change-password/",
+            {"current_password": "Passw0rd!x", "new_password": "password"},
+            format="json",
+        )
+        self.assertEqual(weak.status_code, 400)
+        self.assertIn("uppercase", weak.json()["error"])
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.check_password("Passw0rd!x"))
+
+    def test_change_password_requires_sign_in(self):
+        res = APIClient().post(
+            "/api/v1/auth/change-password/",
+            {"current_password": "Passw0rd!x", "new_password": "Shelf4812!ab"},
+            format="json",
+        )
+        self.assertIn(res.status_code, (401, 403))
+
+
 class AccountSeparationTests(BaseSchoolTest):
     def test_public_signup_cannot_create_teacher(self):
         res = APIClient().post(
